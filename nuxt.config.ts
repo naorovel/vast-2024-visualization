@@ -12,5 +12,30 @@ export default defineNuxtConfig({
     '/openapi.json': {
       proxy: "http://127.0.0.1:8000/openapi.json",
     }
+  },
+  
+  compatibilityDate: "2025-03-16",
+  components: [
+    {
+      path:'~/components',
+      pathPrefix: false,
+    }
+  ],
+  modules:['@nuxt/ui', "@nuxtjs/color-mode"],
+  css:['./assets/css/main.css'],
+  build: {
+    standalone: true,
+    parallel: false,
+    cache: true,
+    hardSource: false
+  },
+  nitro: {
+    devServer: {
+      watch: ['./src/**']
+    }
+  },
+    features: {
+    devLogs: false,
+    transitions: false
   } 
 })

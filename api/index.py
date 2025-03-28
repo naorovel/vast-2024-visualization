@@ -15,3 +15,7 @@ def get_links():
 @app.get('/nodes')
 def get_nodes():
     return get_node_data()
+
+@app.get('/graph')
+def get_graph(): 
+    return {'nodes': get_node_data(), 'links': get_link_data()}
