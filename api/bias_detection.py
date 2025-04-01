@@ -12,9 +12,9 @@ client = Groq(
 )
 
 data = {}
-data_path = '../MC1/mc1.json'
-articles_base_path = '../MC1/articles/'
-bias_base_path = '../MC1/bias/'
+data_path = './data/mc1.json'
+articles_base_path = './data/articles/'
+bias_base_path = './data/bias/'
 
 bias_types = [
     "Confirmation Bias", "Anchoring Bias", "Availability Bias", "Hindsight Bias",
@@ -68,31 +68,31 @@ def get_source_bias(articleid):
             json_bias = json.loads(bias)
             return json_bias
     else: # bias file does not exist
-        # prompt = get_prompt()
+        prompt = get_prompt()
         
-        # article_content = get_article_content(articleid)
+        article_content = get_article_content(articleid)
         
-        # chat_completion = client.chat.completions.create(
-        #     messages = [
-        #         {
-        #             "role": "user",
-        #             "content": str(prompt + "\n" + article_content),
-        #         }
-        #     ],
-        #     model="llama-3.3-70b-versatile"
-        # )
+        chat_completion = client.chat.completions.create(
+            messages = [
+                {
+                    "role": "user",
+                    "content": str(prompt + "\n" + article_content),
+                }
+            ],
+            model="llama-3.3-70b-versatile"
+        )
         
-        # response = chat_completion.choices[0].message.content
-        # json_response = json.loads(response)
+        response = chat_completion.choices[0].message.content
+        json_response = json.loads(response)
         
-        # with open(bias_path, 'w') as file: 
-        #     json.dump(json_response, file)
+        with open(bias_path, 'w') as file: 
+            json.dump(json_response, file)
             
-        # return json_response 
-        return False
+        return json_response 
+        #return False
 
 def get_prompt(): 
-    prompt_path = "prompt.txt"
+    prompt_path = "api/prompt.txt"
     with open(prompt_path, 'r') as file: 
         prompt = "".join(line.rstrip() for line in file)
         return prompt
@@ -127,3 +127,5 @@ def get_link_data():
 
 def get_node_data(): 
     return nodes
+
+add_source_data_to_links()
