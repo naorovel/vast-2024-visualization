@@ -7,70 +7,65 @@
       <button @click="activeChart = 'timeSeries'" :class="{ active: activeChart==='timeSeries' }" style="margin-left: 10px;">Time series</button>
       <button @click="activeChart = 'eventCount'" :class="{ active: activeChart==='eventCount' }" style="margin-left: 10px;">Number of events</button>
     </div>
-    <div class="chart-wrapper">
-      <div class="chart-container"
-           :style="{
-             opacity: activeChart==='sources' ? 1 : 0,
-             pointerEvents: activeChart==='sources' ? 'auto' : 'none'
-           }">
-        <div class="chart-header">
-          <h2>Distribution of Sources Used by Analysts</h2>
-          <button class="download-btn" @click="downloadChart('sources')">download</button>
-        </div>
-        <div ref="chartSources"></div>
+
+    <!-- Distribution of Sources Chart -->
+    <div v-show="activeChart==='sources'">
+      <div class="chart-header">
+        <h2>Distribution of Sources Used by Analysts</h2>
+        <button class="download-btn" @click="downloadChart('sources')">download</button>
       </div>
-      <div class="chart-container"
-           :style="{
-             opacity: activeChart==='algorithm' ? 1 : 0,
-             pointerEvents: activeChart==='algorithm' ? 'auto' : 'none'
-           }">
-        <div class="chart-header">
-          <h2>Algorithm Usage by Analysts</h2>
-          <button class="download-btn" @click="downloadChart('algorithm')">download</button>
-        </div>
-        <div ref="chartAlgorithm"></div>
+      <div ref="chartSources"></div>
+    </div>
+
+    <!-- Algorithm Chart -->
+    <div v-show="activeChart==='algorithm'">
+      <div class="chart-header">
+        <h2>Algorithm Usage by Analysts</h2>
+        <button class="download-btn" @click="downloadChart('algorithm')">download</button>
       </div>
-      <div class="chart-container"
-           :style="{
-             opacity: activeChart==='eventTypes' ? 1 : 0,
-             pointerEvents: activeChart==='eventTypes' ? 'auto' : 'none'
-           }">
-        <div class="chart-header">
-          <h2>Event types assigned by each analyst</h2>
-          <button class="download-btn" @click="downloadChart('eventTypes')">download</button>
-        </div>
-        <div ref="chartEventTypes"></div>
+      <div ref="chartAlgorithm"></div>
+    </div>
+
+    <!-- Event Types Chart -->
+    <div v-show="activeChart==='eventTypes'">
+      <div class="chart-header">
+        <h2>Event types assigned by each analyst</h2>
+        <button class="download-btn" @click="downloadChart('eventTypes')">download</button>
       </div>
-      <div class="chart-container"
-           :style="{
-             opacity: activeChart==='timeSeries' ? 1 : 0,
-             pointerEvents: activeChart==='timeSeries' ? 'auto' : 'none'
-           }">
-        <div class="chart-header">
-          <h2>Time series of entries per analyst over time</h2>
-          <button class="download-btn" @click="downloadChart('timeSeries')">download</button>
-        </div>
-        <div ref="chartTimeSeries"></div>
+      <div ref="chartEventTypes"></div>
+    </div>
+
+    <!-- Time Series Chart with Analyst Drop-Down -->
+    <div v-show="activeChart==='timeSeries'">
+      <div class="chart-header">
+        <h2>Time series of entries per analyst over time</h2>
+        <button class="download-btn" @click="downloadChart('timeSeries')">download</button>
       </div>
-      <div class="chart-container"
-           :style="{
-             opacity: activeChart==='eventCount' ? 1 : 0,
-             pointerEvents: activeChart==='eventCount' ? 'auto' : 'none'
-           }">
-        <div class="chart-header">
-          <h2>Number of events recorded by each analyst</h2>
-          <button class="download-btn" @click="downloadChart('eventCount')">download</button>
-        </div>
-        <div ref="chartEventCount"></div>
+      <!-- Drop-down to select an analyst -->
+      <select v-model="selectedAnalyst" style="margin-bottom: 10px;">
+        <option value="all">All Analysts</option>
+        <option v-for="analyst in timeSeriesAnalysts" :key="analyst" :value="analyst">{{ analyst }}</option>
+      </select>
+      <div ref="chartTimeSeries"></div>
+    </div>
+
+    <!-- Event Count Chart -->
+    <div v-show="activeChart==='eventCount'">
+      <div class="chart-header">
+        <h2>Number of events recorded by each analyst</h2>
+        <button class="download-btn" @click="downloadChart('eventCount')">download</button>
       </div>
+      <div ref="chartEventCount"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 const activeChart = ref('sources')
+const selectedAnalyst = ref('all')
+const timeSeriesAnalysts = ref([])
 
 const chartSources = ref(null)
 const chartAlgorithm = ref(null)
@@ -92,6 +87,10 @@ const paletteEventTypes = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c', '#fb9a99',
   '#e31a1c', '#fdbf6f', '#ff7f00', '#cab2d6', '#6a3d9a'
 ]
+
+// Save layout and original traces for time series to update later
+let originalTimeSeriesTraces = []
+let layoutTimeSeries = {}
 
 const downloadChart = (chartType) => {
   if (!PlotlyRef) return
@@ -131,6 +130,7 @@ onMounted(async () => {
       sourcesSet.add(source)
     }
   }
+  
   const uniqueSources = Array.from(sourcesSet)
   const analystsSources = Object.keys(dataMapSources)
   const tracesSources = uniqueSources.map((source, index) => {
@@ -144,15 +144,20 @@ onMounted(async () => {
       marker: { color: paletteSources[index % paletteSources.length] }
     }
   })
+  const baseWidth = 1694;
+  const baseHeight = 600;
   const layoutSources = {
     title: 'Distribution of Sources Used by Analysts',
     barmode: 'stack',
     xaxis: { title: 'Count' },
     yaxis: { title: 'Analyst' },
     legend: { title: { text: 'Source' }, x: 1.05, y: 1 },
-    margin: { l: 100, r: 100, t: 50, b: 50 }
+    margin: { l: 100, r: 100, t: 50, b: 50 },
+    width: baseWidth,
+    height: baseHeight
   }
   Plotly.newPlot(chartSources.value, tracesSources, layoutSources)
+  
 
   const dataMapAlgorithm = {}
   events.forEach(event => {
@@ -187,7 +192,9 @@ onMounted(async () => {
     xaxis: { title: 'Analyst' },
     yaxis: { title: 'Count' },
     legend: { title: { text: 'Algorithm' }, x: 1.05, y: 1 },
-    margin: { l: 100, r: 100, t: 50, b: 150 } 
+    margin: { l: 100, r: 100, t: 50, b: 150 },
+    width: baseWidth,
+    height: baseHeight
   }
   Plotly.newPlot(chartAlgorithm.value, tracesAlgorithm, layoutAlgorithm)
 
@@ -216,21 +223,26 @@ onMounted(async () => {
     y: analystsEvent,
     z: eventMatrix,
     type: 'heatmap',
-    colorscale: 'YlGnBu'
+    colorscale: 'YlGnBu',
+    colorbar: {
+      title: 'Event Count',
+      titleside: 'right'
+    }
   }
   const layoutEventTypes = {
-  title: 'Event Types Heatmap by Analyst',
-  xaxis: {
-    title: 'Event Type',
-    tickangle: -45,
-    automargin: true,
-    tickfont: { size: 10 }
-  },
-  yaxis: { title: 'Analyst' },
-  margin: { l: 100, r: 100, t: 50, b: 150 } 
-}
+    title: 'Event Types Heatmap by Analyst',
+    xaxis: {
+      title: 'Event Type',
+      tickangle: -45,
+      automargin: true
+    },
+    yaxis: { title: 'Analyst' },
+    margin: { l: 120, r: 120, t: 60, b: 80 },
+    width: baseWidth,
+    height: baseHeight
+  }
   Plotly.newPlot(chartEventTypes.value, [traceEventTypes], layoutEventTypes)
-
+  
   const dataMapTime = {}
   events.forEach(event => {
     const analyst = event._last_edited_by
@@ -243,7 +255,9 @@ onMounted(async () => {
   })
   const uniqueDates = Object.keys(dataMapTime).sort()
   const analystsTime = Array.from(new Set(events.map(e => e._last_edited_by)))
-  const tracesTimeSeries = analystsTime.map(analyst => {
+  // Save the list of analysts for the drop-down
+  timeSeriesAnalysts.value = analystsTime
+  originalTimeSeriesTraces = analystsTime.map(analyst => {
     const counts = uniqueDates.map(date => dataMapTime[date][analyst] || 0)
     return {
       x: uniqueDates,
@@ -253,25 +267,30 @@ onMounted(async () => {
       mode: 'lines+markers'
     }
   })
-  const layoutTimeSeries = {
+  layoutTimeSeries = {
     title: 'Entries Over Time per Analyst',
     xaxis: { title: 'Date' },
     yaxis: { title: 'Number of Entries' },
     legend: { title: { text: 'Analyst' }, x: 1.05, y: 1 },
-    margin: { l: 100, r: 100, t: 50, b: 50 }
+    margin: { l: 100, r: 100, t: 50, b: 50 },
+    width: baseWidth,
+    height: baseHeight
   }
-  Plotly.newPlot(chartTimeSeries.value, tracesTimeSeries, layoutTimeSeries)
+  // Initially plot all analysts
+  Plotly.newPlot(chartTimeSeries.value, originalTimeSeriesTraces, layoutTimeSeries)
 
   const counts = {}
   events.forEach(event => {
     const analyst = event._last_edited_by
     counts[analyst] = (counts[analyst] || 0) + 1
   })
-  const analystsCount = Object.keys(counts)
-  const eventCounts = Object.values(counts)
+  // Sort analysts by count (least -> most)
+  const sortedEntries = Object.entries(counts).sort((a, b) => a[1] - b[1])
+  const sortedAnalysts = sortedEntries.map(entry => entry[0])
+  const sortedEventCounts = sortedEntries.map(entry => entry[1])
   const traceEventCount = {
-    x: analystsCount,
-    y: eventCounts,
+    x: sortedAnalysts,
+    y: sortedEventCounts,
     type: 'bar',
     marker: { color: '#4a90e2' }
   }
@@ -284,30 +303,33 @@ onMounted(async () => {
     yaxis: {
       title: 'Number of Events'
     },
-    margin: { t: 50, b: 100, l: 70, r: 20 }
+    margin: { t: 50, b: 100, l: 70, r: 20 },
+    width: baseWidth,
+    height: baseHeight
   }
   Plotly.newPlot(chartEventCount.value, [traceEventCount], layoutEventCount)
+})
+
+// Watch for changes in selectedAnalyst to update the time series chart
+watch(selectedAnalyst, (newVal) => {
+  let updatedTraces;
+  if (newVal === 'all') {
+    updatedTraces = originalTimeSeriesTraces;
+  } else {
+    updatedTraces = originalTimeSeriesTraces.filter(trace => trace.name === newVal);
+  }
+  PlotlyRef.react(chartTimeSeries.value, updatedTraces, layoutTimeSeries);
 })
 </script>
 
 <style scoped>
-.chart-wrapper {
-  position: relative;
-  min-height: 600px;
-}
-.chart-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  transition: opacity 0.5s ease;
-}
 .chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
+
 button {
   padding: 8px 16px;
   border: none;
@@ -341,5 +363,12 @@ button:hover {
 
 .download-btn:hover {
   background-color: #218838;
+}
+
+select {
+  padding: 6px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
 }
 </style>
