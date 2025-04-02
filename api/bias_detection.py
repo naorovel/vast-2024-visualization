@@ -60,7 +60,7 @@ def add_source_data_to_links():
 def get_source_bias(articleid): 
     
     bias_path = bias_base_path + str(articleid) + ".json"
-
+    print(articleid)
     if os.path.isfile(bias_path): 
         # Read existing bias file
         with open(bias_path, 'r') as file:
