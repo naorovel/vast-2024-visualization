@@ -1,70 +1,48 @@
 <template>
   <div>
-    <div v-if="pending">Loading graph data...</div>
-    <div v-else-if="error">Error loading data: {{ error }}</div>
+    <div v-if="pending">Loading...</div>
     <div v-else-if="data">
-      <div class="graph-info">
-        Loaded {{ data.nodes.length }} nodes and {{ data.links.length }} links
-      </div>
+      <!-- <pre>{{ data }}</pre> -->
+      <!-- Display structured data -->
+      <!-- <div v-for="node in data.nodes" :key="node.id">
+        Node: {{ node.id }}
+      </div> -->
       <ForceGraph
-        :nodes="data.nodes"
-        :links="data.links"
-      />
+      :nodes="data.nodes"
+      :links="data.links"/>
     </div>
     <div v-else>No data available</div>
   </div>
 </template>
 
+
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import ForceGraph from './ForceGraph.vue'
 
-type Node = { id: string }
-type Link = { source: string; target: string }
-type GraphData = { nodes: Node[]; links: Link[] }
+type Node = {
+    id: string
+}
 
-const GRAPH_API_URL = 'http://localhost:8000/graph'
+type Link = {
+    source: string,
+    target: string
+}
 
-const data = ref<GraphData | null>(null)
-const pending = ref(true)
-const error = ref<Error | null>(null)
+type GraphData = {
+    nodes: Node[],
+    links: Link[]
+}
 
-onMounted(async () => {
-  try {
-    const response = await $fetch(GRAPH_API_URL, {
-      headers: { Accept: '*/*' },
-      timeout: 90000 // 30 seconds timeout
-    })
+const API_URL = 'http://localhost:8000/graph'
 
-    // Process data in smaller chunks to avoid blocking UI
-    const processData = async (res: any): Promise<GraphData> => {
-      const nodes = []
-      const links = []
-      
-      // Process nodes in batches
-      for (let i = 0; i < res.nodes.length; i++) {
-        nodes.push({ id: res.nodes[i].id })
-        if (i % 1000 === 0) await new Promise(resolve => setTimeout(resolve, 0))
-      }
-
-      // Process links in batches
-      for (let i = 0; i < res.links.length; i++) {
-        links.push({
-          source: res.links[i].source,
-          target: res.links[i].target
-        })
-        if (i % 1000 === 0) await new Promise(resolve => setTimeout(resolve, 0))
-      }
-
-      return { nodes, links }
-    }
-
-    data.value = await processData(response)
-  } catch (err) {
-    error.value = err
-    console.error('Fetch error:', err)
-  } finally {
-    pending.value = false
-  }
+const { data, pending } = useFetch<GraphData>(API_URL, { // Note changed to GraphData (not array)
+  headers: { 'Accept': '*/*' },
+  transform: (res: any) => ({
+    nodes: res.nodes.map((node: Node) => ({ id: node.id })),
+    links: res.links.map((link: Link) => ({ 
+      source: link.source, 
+      target: link.target 
+    }))
+  })
 })
+
 </script>

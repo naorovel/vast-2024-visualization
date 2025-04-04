@@ -28,6 +28,8 @@ bias_types = [
     "Experiential Bias", "Linguistic Bias", "Cultural Bias"
 ]
 
+graph = {'nodes': [], 'links': [], 'graph': {}}
+
 with open(data_path) as file: 
     data = json.load(file)
 
@@ -50,11 +52,11 @@ print(nodes[0])
 print(links[0])
 
 # For each link, add the corresponding data from the original source
-def add_source_data_to_links(): 
+def add_source_data_to_links(links_df): 
     # Add original data to link
-    data_df = links_to_df(links) 
+    data_df = links_df
     data_df['bias_dict'] = data_df.apply(lambda x: get_source_bias(x['_articleid']), axis=1)
-    print(data_df['bias_dict'])
+    #print(data_df['bias_dict'])
     return data_df
 
 def get_source_bias(articleid): 
@@ -119,13 +121,36 @@ def clean_links(link_df):
             axis=1)
     return link_df
 
-def get_link_data(): 
-    link_df = add_source_data_to_links() 
+def get_filtered_links(num_nodes): 
+    links_df = links_to_df(links)
+    node_list = get_node_data(num_nodes)
+    node_ids = get_node_ids(node_list)
+    links_df['filtered_source'] = links_df.apply(lambda x: any(x['source'] in y for y in node_ids), axis=1)
+    links_df['filtered_target'] = links_df.apply(lambda x: any(x['target'] in y for y in node_ids), axis=1)
+    return links_df[(links_df['filtered_source']) & (links_df['filtered_target'])]
+
+def get_link_data(num_nodes): 
+    link_df = get_filtered_links(num_nodes)
+    #print(link_df)
+    link_df = add_source_data_to_links(link_df) 
     link_df = clean_links(link_df)
     links = link_df.to_json()
     return links
 
-def get_node_data(): 
-    return nodes
+def get_node_ids(nodes): 
+    ids = []
+    for node in nodes: 
+        ids.append(node['id'])
+    return ids
 
-add_source_data_to_links()
+def get_node_data(num_nodes): 
+    return nodes[0:num_nodes]
+
+def get_graph_data(num_nodes): 
+    return {'nodes': get_node_data(num_nodes), 'links': get_link_data(num_nodes)}
+
+def load_graph(num_nodes): 
+    global graph
+    graph = {'nodes': get_node_data(num_nodes), 'links': get_link_data(num_nodes), 'graph': get_graph_data(num_nodes)}
+    print("Graph loaded!")
+    return graph

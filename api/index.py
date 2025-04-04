@@ -1,7 +1,12 @@
 from fastapi import FastAPI
-from api.bias_detection import *
+from api.bias_detection import get_link_data, get_node_data, load_graph
 
 app = FastAPI()
+
+num_nodes = 3
+
+graph = load_graph(num_nodes)
+print(graph)
 
 @app.get("/api")
 def hello_world():
@@ -10,12 +15,15 @@ def hello_world():
 
 @app.get('/links')
 def get_links(): 
-    return get_link_data()
+    global graph
+    return graph['links']
 
 @app.get('/nodes')
 def get_nodes():
-    return get_node_data()
+    global graph
+    return graph['nodes']
 
 @app.get('/graph')
 def get_graph(): 
-    return {'nodes': get_node_data(), 'links': get_link_data()}
+    global graph
+    return graph['graph']
