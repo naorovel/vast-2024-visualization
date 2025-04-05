@@ -1,8 +1,8 @@
 <template>
   <div>
-    <pre>{{ JSON.stringify(data, null, 2) }}</pre>
+    <!-- <pre>{{ JSON.stringify(data, null, 2) }}</pre> -->
     <div v-if="pending">Loading...</div>
-    <div v-if="error">Error: {{ error.message }}</div>
+    <!-- <div v-if="error">Error: {{ error.message }}</div> -->
     <div v-else-if="data">
       <!-- <pre>{{ data }}</pre> -->
       <!-- <div v-for="node in data.nodes" :key="node.id">

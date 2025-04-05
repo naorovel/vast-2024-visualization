@@ -1,22 +1,50 @@
 <template>
   <client-only>
-    <div ref="graphContainer" class="graph-container">
-      <div 
-        v-if="hoveredElement" 
-        class="tooltip"
-        :style="{
-          left: mousePosition.x + 10 + 'px',
-          top: mousePosition.y + 10 + 'px'
-        }"
-      >
-        <div v-if="hoveredElement.type === 'node'">
-          Node: {{ hoveredElement.data.id }}
+    <div class="graph-wrapper">
+
+      <div v-if="selectedNode || selectedLink" class="side-menu">
+      <div class="menu-header">
+          <h3>{{ selectedNode ? 'Node Details' : 'Link Details' }}</h3>
+          <button @click="clearSelection">×</button>
         </div>
-        <div v-else>
-          Link: {{ hoveredElement.data.source.id }} → {{ hoveredElement.data.target.id }}
+        <div class="menu-content">
+          <!-- Node Details -->
+          <div v-if="selectedNode">
+            <p>ID: {{ selectedNode.id }}</p>
+            <p>Connections: {{ selectedNode.connections?.length || 0 }}</p>
+            <pre>{{ selectedNode }}</pre>
+          </div>
+          
+          <!-- Link Details -->
+          <div v-if="selectedLink">
+            <p>Source: {{ selectedLink.source.id }}</p>
+            <p>Target: {{ selectedLink.target.id }}</p>
+            <pre>{{ selectedLink }}</pre>
+          </div>
+
+
+        </div>
+      </div>
+
+      <div ref="graphContainer" class="graph-container" @click="handleBackgroundClick">
+        <div 
+          v-if="hoveredElement" 
+          class="tooltip"
+          :style="{
+            left: mousePosition.x + 10 + 'px',
+            top: mousePosition.y + 10 + 'px'
+          }"
+        >
+          <div v-if="hoveredElement.type === 'node'">
+            Node: {{ hoveredElement.data.id }}
+          </div>
+          <div v-else>
+            Link: {{ hoveredElement.data.source.id }} → {{ hoveredElement.data.target.id }}
+          </div>
         </div>
       </div>
     </div>
+    
   </client-only>
 </template>
 
@@ -35,7 +63,9 @@ export default {
       zoom: null,
       zoomGroup: null,
       hoveredElement: null,
-      mousePosition: { x: 0, y: 0 }
+      mousePosition: { x: 0, y: 0 },
+      selectedNode: null,
+      selectedLink: null,
     }
   },
   mounted() {
@@ -67,6 +97,10 @@ export default {
         })
 
       svg.call(this.zoom)
+    },
+    clearSelection() {
+      this.selectedNode = null
+      this.selectedLink = null
     },
     resetZoom() {
       const svg = this.d3.select(this.$refs.graphContainer).select('svg')
@@ -109,19 +143,10 @@ export default {
       
       // Create simulation
       this.simulation = this.d3.forceSimulation()
-        .force('charge', this.d3.forceManyBody().strength(-0.1))
+        .force('charge', this.d3.forceManyBody().strength(-1000))
         .force('center', this.d3.forceCenter(width / 2, height / 2))
-        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(3))
+        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(200))
         .force('collision', this.d3.forceCollide().radius(5))
-
-      // Draw links and nodes inside zoom group
-      // const link = this.zoomGroup
-      //   .append('g')
-      //   .selectAll('line')
-      //   .data(this.processedLinks)
-      //   .join('line')
-      //   .attr('stroke', '#2a9d8f')
-      //   .attr('stroke-width', 1)
 
       const link = this.zoomGroup
         .append('g')
@@ -167,6 +192,12 @@ export default {
         })
         .on('mousemove', this.updateMousePosition)
 
+      node
+        .on('click', (event, d) => {
+        this.selectedNode = d
+        event.stopPropagation() // Prevent background click
+      })
+
       // Add hover handlers to links
       link
         .on('mouseover', (event, d) => {
@@ -177,6 +208,20 @@ export default {
           this.hoveredElement = null
         })
         .on('mousemove', this.updateMousePosition)
+
+      link
+        .on('click', (event, d) => {
+        this.selectedLink = d
+        this.selectedNode = null  // Clear node selection
+        event.stopPropagation()
+      })
+
+      // Update existing node click handler
+      node.on('click', (event, d) => {
+        this.selectedNode = d
+        this.selectedLink = null  // Clear link selection
+        event.stopPropagation()
+      })
 
       const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
       svg_mouse.on('mousemove', this.updateMousePosition)
@@ -201,6 +246,10 @@ export default {
           event.subject.fx = null
           event.subject.fy = null
         })
+    },
+
+    handleBackgroundClick() {
+      this.clearSelection()
     },
 
     updateMousePosition(event) {
@@ -245,6 +294,52 @@ export default {
 }
 
 .graph-container {
+  position: relative;
+}
+
+.graph-wrapper {
+  display: flex;
+  position: relative;
+}
+
+.side-menu {
+  width: 300px;
+  background: white;
+  border-right: 1px solid #ccc;
+  height: 100vh;
+  overflow-y: auto;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  z-index: 100;
+  position: fixed;
+  left: 0;
+  top: 0;
+}
+
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.menu-header button {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+}
+
+.menu-content {
+  padding: 15px;
+  color: #264653;
+
+}
+
+.graph-container {
+  flex-grow: 1;
+  margin-left: 300px; /* Match side menu width */
+  height: 100vh;
   position: relative;
 }
 </style>
