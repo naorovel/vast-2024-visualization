@@ -159,6 +159,34 @@ export default {
         .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(200))
         .force('collision', this.d3.forceCollide().radius(5))
 
+      const nodeGroups = this.zoomGroup
+        .append('g')
+        .selectAll('g.node-group')
+        .data(this.nodes)
+        .join('g')
+        .attr('class', 'node-group')
+        .call(this.dragHandler());
+
+      // Add invisible hit area
+      nodeGroups.append('circle')
+        .attr('r', 15)
+        .attr('fill', 'transparent')
+        .attr('pointer-events', 'visible');
+
+      // Add visible node circle
+      nodeGroups.append('circle')
+        .attr('r', 5)
+        .attr('fill', '#264653');
+
+      // Add text labels
+      nodeGroups.append('text')
+        .text(d => d.id)
+        .attr('dx', 8)
+        .attr('dy', 4)
+        .style('font-size', '10px')
+        .style('fill', '#264653')
+        .style('pointer-events', 'none');      
+
       const link = this.zoomGroup
         .append('g')
         .selectAll('line')
@@ -191,6 +219,9 @@ export default {
           node
             .attr('cx', d => d.x)
             .attr('cy', d => d.y)
+
+          nodeGroups
+            .attr('transform', d => `translate(${d.x},${d.y})`);
         })
 
       node
@@ -245,6 +276,17 @@ export default {
         this.selectedNode = null
       })
 
+      nodeGroups
+        .on('mouseover', (event, d) => {
+          this.hoveredElement = { type: 'node', data: d };
+          this.updateMousePosition(event);
+        })
+        .on('click', (event, d) => {
+          this.selectedNode = d;
+          this.selectedConnection = null;
+          event.stopPropagation();
+        });
+
       const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
       svg_mouse.on('mousemove', this.updateMousePosition)
       
@@ -287,6 +329,8 @@ export default {
   }
 }
 </script>
+
+
 
 <style>
 .reset-zoom {
@@ -376,5 +420,10 @@ export default {
 .link-item pre {
   margin: 0;
   font-size: 0.9em;
+}
+
+.node-group text {
+  user-select: none;
+  -webkit-user-select: none;
 }
 </style>
