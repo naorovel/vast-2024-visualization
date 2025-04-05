@@ -2,6 +2,24 @@
   <client-only>
     <div class="graph-wrapper">
 
+      <div class="filter-panel">
+        <h4>Filter by Bias Type:</h4>
+        <div 
+          v-for="bias in allBiasTypes" 
+          :key="bias"
+          class="filter-item"
+        >
+          <label>
+            <input
+              type="checkbox"
+              v-model="selectedBiases"
+              :value="bias"
+            >
+            {{ formatBiasName(bias) }}
+          </label>
+        </div>
+      </div>      
+
       <div v-if="selectedNode || selectedConnection" class="side-menu">
         <div class="menu-header">
           <h3>
@@ -32,7 +50,6 @@
               class="link-item"
             >
               <div class="link-properties">
-                <!-- Display specific properties -->
                 <div v-if="link.type">
                   Type: <strong>{{ link.type }}</strong>
                 </div>
@@ -52,7 +69,21 @@
                   Last Edited Date: <strong>{{ link.last_edited_date }}</strong>
                 </div>
                 <div v-if="link.bias_types">
-                  Bias Types: <strong>{{ link.bias_types }}</strong>
+                  <div v-for="(biasValues, biasType) in link.bias_types" 
+                      :key="biasType"
+                      class="bias-item">
+                    <strong>{{ formatBiasName(biasType) }}:</strong>
+                    <div v-if="biasValues.length > 0">
+                      <div v-for="(value, index) in biasValues" 
+                          :key="index"
+                          class="bias-value">
+                        {{ value }}
+                      </div>
+                    </div>
+                    <div v-else class="bias-value">
+                      No specific values recorded
+                    </div>
+                  </div>
                 </div>
               </div>
               <!-- Optional: Keep raw data view -->
@@ -68,6 +99,8 @@
           </div>
         </div>
       </div>
+
+
 
       <div ref="graphContainer" class="graph-container" @click="handleBackgroundClick">
         <div 
@@ -109,6 +142,35 @@ export default {
       mousePosition: { x: 0, y: 0 },
       selectedNode: null,
       selectedConnection: null,
+      selectedBiases: [],
+    }
+  },
+  computed: {
+    filteredLinks() {
+      if (!this.selectedBiases.length) return this.links;
+      return this.links.filter(link => 
+        this.selectedBiases.some(bias => link.has_bias?.[bias])
+      );
+    },
+    allBiasTypes() {
+      const biases = new Set();
+      this.links.forEach(link => {
+        if (link.bias_types) {
+          Object.keys(link.bias_types).forEach(bias => {
+            if (bias in link.has_bias) biases.add(bias);
+          });
+        }
+      });
+      return Array.from(biases).sort();
+    }
+  },
+  watch: {
+    // Add watcher
+    filteredLinks: {
+      handler(newLinks) {
+        this.updateGraphData(newLinks);
+      },
+      immediate: true
     }
   },
   mounted() {
@@ -118,8 +180,12 @@ export default {
         this.processLinks()
         this.initGraph()
         this.initZoom()
-      })
-    }
+        // Add debug logs
+        console.log('All Links:', this.links)
+        console.log('All Bias Types:', this.allBiasTypes)
+        console.log('First Link Bias:', this.links[0]?.bias_types)
+    })
+  }
   },
   methods: {
     // Zoom methods
@@ -356,6 +422,66 @@ export default {
         x: (event.clientX - container.left - transform.x) / transform.k,
         y: (event.clientY - container.top - transform.y) / transform.k
       }
+    },
+
+    formatBiasName(biasKey) {
+      return biasKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    },
+
+    updateGraphData(filteredLinks) {
+      if (!this.d3 || !this.simulation) return;
+      
+      // Process new links
+      const nodeMap = new Map(this.nodes.map(node => [node.id, node]));
+      this.processedLinks = filteredLinks.map(link => {
+        const source = nodeMap.get(link.source);
+        const target = nodeMap.get(link.target);
+        return source && target ? { ...link, source, target } : null;
+      }).filter(Boolean);
+
+      // Update simulation
+      this.simulation.force('link').links(this.processedLinks);
+      this.simulation.alpha(1).restart();
+
+      // Update links visualization
+      const links = this.zoomGroup.selectAll('line')
+        .data(this.processedLinks)
+        .join(
+          enter => enter.append('line')
+            .attr('stroke', '#2a9d8f')
+            .attr('stroke-width', 5)
+            .attr('stroke-opacity', 0.3)
+            .attr('pointer-events', 'visible'),
+          update => update,
+          exit => exit.remove()
+        );
+
+      // Update link interactions
+      links
+        .on('mouseover', (event, d) => {
+          this.hoveredElement = { type: 'link', data: d };
+          this.updateMousePosition(event);
+        })
+        .on('click', this.handleLinkClick);
+    },
+
+    handleLinkClick(event, clickedLink) {
+      event.stopPropagation();
+      const nodePair = [
+        clickedLink.source.id, 
+        clickedLink.target.id
+      ].sort().join('|');
+      
+      const allLinks = this.filteredLinks.filter(l => {
+        const currentPair = [l.source.id, l.target.id].sort().join('|');
+        return currentPair === nodePair;
+      });
+
+      this.selectedConnection = {
+        nodes: [clickedLink.source, clickedLink.target],
+        links: allLinks
+      };
+      this.selectedNode = null;
     }
 
   }
@@ -472,6 +598,49 @@ export default {
 pre {
   font-size: 0.8em;
   opacity: 0.7;
+}
+
+.filter-panel {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  background: white;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 1000;
+  max-height: 80vh;
+  overflow-y: auto;
+  max-width: 300px;
+}
+
+.filter-item {
+  margin: 5px 0;
+}
+
+.filter-item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.filter-item input {
+  margin: 0;
+}
+
+.bias-item {
+  margin: 8px 0;
+  padding: 6px;
+  background: #f7f7f7;
+  border-radius: 4px;
+}
+
+.bias-value {
+  font-size: 0.85em;
+  color: #666;
+  margin-left: 12px;
 }
 
 </style>

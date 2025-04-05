@@ -4,10 +4,6 @@
     <div v-if="pending">Loading...</div>
     <!-- <div v-if="error">Error: {{ error.message }}</div> -->
     <div v-else-if="data">
-      <!-- <pre>{{ data }}</pre> -->
-      <!-- <div v-for="node in data.nodes" :key="node.id">
-        Node: {{ node.id }}
-      </div> -->
       <ForceGraph
       :nodes="data.nodes"
       :links="data.links"/>
@@ -23,39 +19,6 @@ type Node = {
     id: string
 }
 
-type Bias = {
-    positive_bias: [],
-    lack_of_objectivity: [],
-    authority_bias: [],
-    halo_effect: [],
-    social_desirability_bias: [],
-    confirmation_bias: [],
-    anchoring_bias: [],
-    availability_bias: [],
-    hindsight_bias: [],
-    framing_bias: [],
-    actor_observer_bias: [],
-    fundamental_attribution_error_bias: [],
-    self_serving_bias: [],
-    bandwagon_effect: [],
-    status_quo_bias: [],
-    loss_aversion_bias: [],
-    overconfidence_bias: [],
-    illusion_of_control_bias: [],
-    gambler_fallacy_bias: [],
-    negative_bias: [],
-    emotional_bias: [],
-    recency_bias: [],
-    sunk_cost_fallacy: [],
-    stereotyping: [],
-    selection_bias: [],
-    presentation_bias: [],
-    information_bias: [],
-    experiential_bias: [],
-    linguistic_bias: [],
-    cultural_bias: []    
-}
-
 type Link = {
     source: string,
     target: string,
@@ -65,7 +28,7 @@ type Link = {
     _algorithm: string,
     _last_edited_by: string,
     _last_edited_date: Date,
-    bias_types: Bias
+    bias_dict: Object
     
 }
 
@@ -79,20 +42,33 @@ const API_URL = 'http://localhost:8000/graph'
 const { data, pending, error} = useFetch<GraphData>(API_URL, { 
   headers: { 'Accept': '*/*' },
   transform: (res: any) => {
-    console.log('API Response:', res) // Inspect this in browser
+    console.log('Processed Links:', res.links) // Add this for debugging
     return {
       nodes: res.nodes?.map((node: Node) => ({ id: node.id })),
-      links: res.links?.map((link: Link) => ({ 
-        source: link.source, 
-        target: link.target, 
-        type: link.type,
-        date_added: new Date(link._date_added),
-        raw_source: link._raw_source,
-        algorithm: link._algorithm,
-        last_edited_by: link._last_edited_by,
-        last_edited_date: new Date(link._last_edited_date),
-        bias_types: link.bias_types
-      }))
+      links: res.links?.map((link: Link) => {
+        // Preserve all bias types regardless of array contents
+        const biasTypes = link.bias_dict || {};
+        console.log('bias_types: ', link.bias_dict)
+        // Convert to object with boolean presence indicators
+        const biasPresence = Object.fromEntries(
+          Object.entries(biasTypes).map(([key, val]) => 
+            [key, val.length > 0]
+          )
+        );
+
+        return {
+          source: link.source, 
+          target: link.target,
+          type: link.type,
+          date_added: new Date(link._date_added),
+          raw_source: link._raw_source,
+          algorithm: link._algorithm,
+          last_edited_by: link._last_edited_by,
+          last_edited_date: new Date(link._last_edited_date),
+          bias_types: biasTypes,  // Keep original structure
+          has_bias: biasPresence  // Add presence map for filtering
+        }
+      })
     }
   }
 })
