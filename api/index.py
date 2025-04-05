@@ -6,7 +6,6 @@ app = FastAPI()
 num_nodes = 10
 
 graph = load_graph(num_nodes)
-print(graph)
 
 @app.get("/api")
 def hello_world():

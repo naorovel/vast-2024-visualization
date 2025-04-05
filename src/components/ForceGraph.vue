@@ -31,8 +31,40 @@
               :key="index"
               class="link-item"
             >
-              <pre>{{ link }}</pre>
+              <div class="link-properties">
+                <!-- Display specific properties -->
+                <div v-if="link.type">
+                  Type: <strong>{{ link.type }}</strong>
+                </div>
+                <div v-if="link.date_added">
+                  Date Added: <strong>{{ link.date_added }}</strong>
+                </div>
+                <div v-if="link.raw_source">
+                  Raw Source: <strong>{{ link.raw_source }}</strong>
+                </div>
+                <div v-if="link.algorithm">
+                  Algorithm: <strong>{{ link.algorithm }}</strong>
+                </div>
+                <div v-if="link.last_edited_by">
+                  Last Edited By: <strong>{{ link.last_edited_by }}</strong>
+                </div>
+                <div v-if="link.last_edited_date">
+                  Last Edited Date: <strong>{{ link.last_edited_date }}</strong>
+                </div>
+                <div v-if="link.bias_types">
+                  Bias Types: <strong>{{ link.bias_types }}</strong>
+                </div>
+              </div>
+              <!-- Optional: Keep raw data view -->
+              <pre v-if="showRawLinkData">{{ link }}</pre>
             </div>
+            <!-- <div 
+              v-for="(link, index) in selectedConnection.links" 
+              :key="index"
+              class="link-item"
+            >
+              <pre>{{ link }}</pre>
+            </div> -->
           </div>
         </div>
       </div>
@@ -124,7 +156,7 @@ export default {
       this.processedLinks = this.links.map(link => {
         const source = nodeMap.get(link.source)
         const target = nodeMap.get(link.target)
-        return source && target ? { source, target } : null
+        return source && target ? { ...link, source, target } : null
       }).filter(Boolean)
     },
     getDimensions() {
@@ -426,4 +458,20 @@ export default {
   user-select: none;
   -webkit-user-select: none;
 }
+
+.link-properties {
+  margin-bottom: 8px;
+}
+
+.link-properties div {
+  margin: 4px 0;
+  font-size: 0.9em;
+  color: #2a9d8f;
+}
+
+pre {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
 </style>

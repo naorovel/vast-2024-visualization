@@ -119,6 +119,11 @@ def clean_links(link_df):
         link_df[bias] = link_df.apply(lambda x: 
             x['bias_dict'].get(bias) if (type(x['bias_dict']) != bool) else None, 
             axis=1)
+        
+    # eliminate unnecessary columns
+    # link_cleaned = link_df.loc[:, link_df.columns != 'bias_dict']
+    # link_cleaned = link_cleaned.loc[:, link_df.columns != 'filtered_source']
+    # link_cleaned = link_cleaned.loc[:, link_df.columns != 'filtered_target']
     return link_df
 
 def get_filtered_links(num_nodes): 
@@ -135,6 +140,7 @@ def get_link_data(num_nodes):
     link_df = add_source_data_to_links(link_df) 
     link_df = clean_links(link_df)
     links = link_df.to_dict(orient='records')
+    print(link_df)
     return links
 
 def get_node_ids(nodes): 
@@ -152,5 +158,4 @@ def get_graph_data(num_nodes):
 def load_graph(num_nodes): 
     global graph
     graph = {'nodes': get_node_data(num_nodes), 'links': get_link_data(num_nodes), 'graph': get_graph_data(num_nodes)}
-    print("Graph loaded!")
     return graph
