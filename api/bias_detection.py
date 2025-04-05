@@ -134,7 +134,7 @@ def get_link_data(num_nodes):
     #print(link_df)
     link_df = add_source_data_to_links(link_df) 
     link_df = clean_links(link_df)
-    links = link_df.to_json()
+    links = link_df.to_dict(orient='records')
     return links
 
 def get_node_ids(nodes): 

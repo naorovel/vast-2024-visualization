@@ -1,9 +1,25 @@
 <template>
   <client-only>
     <div ref="graphContainer" class="graph-container">
+      <div 
+        v-if="hoveredElement" 
+        class="tooltip"
+        :style="{
+          left: mousePosition.x + 10 + 'px',
+          top: mousePosition.y + 10 + 'px'
+        }"
+      >
+        <div v-if="hoveredElement.type === 'node'">
+          Node: {{ hoveredElement.data.id }}
+        </div>
+        <div v-else>
+          Link: {{ hoveredElement.data.source.id }} → {{ hoveredElement.data.target.id }}
+        </div>
+      </div>
     </div>
   </client-only>
 </template>
+
 
 <script>
 export default {
@@ -17,7 +33,9 @@ export default {
       simulation: null,
       processedLinks: [],
       zoom: null,
-      zoomGroup: null
+      zoomGroup: null,
+      hoveredElement: null,
+      mousePosition: { x: 0, y: 0 }
     }
   },
   mounted() {
@@ -91,30 +109,41 @@ export default {
       
       // Create simulation
       this.simulation = this.d3.forceSimulation()
-        .force('charge', this.d3.forceManyBody().strength(-0.0))
+        .force('charge', this.d3.forceManyBody().strength(-0.1))
         .force('center', this.d3.forceCenter(width / 2, height / 2))
         .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(3))
         .force('collision', this.d3.forceCollide().radius(5))
 
       // Draw links and nodes inside zoom group
+      // const link = this.zoomGroup
+      //   .append('g')
+      //   .selectAll('line')
+      //   .data(this.processedLinks)
+      //   .join('line')
+      //   .attr('stroke', '#2a9d8f')
+      //   .attr('stroke-width', 1)
+
       const link = this.zoomGroup
         .append('g')
         .selectAll('line')
         .data(this.processedLinks)
         .join('line')
         .attr('stroke', '#2a9d8f')
-        .attr('stroke-width', 0.2)
+        .attr('stroke-width', 5) // Increased hit area
+        .attr('stroke-opacity', 0.3) // Keep visible but subtle
+        .attr('pointer-events', 'visible');
 
       const node = this.zoomGroup
         .append('g')
         .selectAll('circle')
         .data(this.nodes)
         .join('circle')
-        .attr('r', 0.5)
+        .attr('r', 5)
         .attr('fill', '#264653')
+        .attr('pointer-events', 'visible')
         .call(this.dragHandler())
-
-      // Simulation handler
+      
+        // Simulation handler
       this.simulation.nodes(this.nodes)
         .on('tick', () => {
           link
@@ -127,6 +156,31 @@ export default {
             .attr('cx', d => d.x)
             .attr('cy', d => d.y)
         })
+
+      node
+        .on('mouseover', (event, d) => {
+          this.hoveredElement = { type: 'node', data: d }
+          this.updateMousePosition(event)
+        })
+        .on('mouseout', () => {
+          this.hoveredElement = null
+        })
+        .on('mousemove', this.updateMousePosition)
+
+      // Add hover handlers to links
+      link
+        .on('mouseover', (event, d) => {
+          this.hoveredElement = { type: 'link', data: d }
+          this.updateMousePosition(event)
+        })
+        .on('mouseout', () => {
+          this.hoveredElement = null
+        })
+        .on('mousemove', this.updateMousePosition)
+
+      const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
+      svg_mouse.on('mousemove', this.updateMousePosition)
+      
     },
 
     dragHandler() {
@@ -147,7 +201,18 @@ export default {
           event.subject.fx = null
           event.subject.fy = null
         })
+    },
+
+    updateMousePosition(event) {
+      const container = this.$refs.graphContainer.getBoundingClientRect()
+      const transform = this.d3.zoomTransform(this.zoomGroup.node())
+      
+      this.mousePosition = {
+        x: (event.clientX - container.left - transform.x) / transform.k,
+        y: (event.clientY - container.top - transform.y) / transform.k
+      }
     }
+
   }
 }
 </script>
@@ -163,5 +228,23 @@ export default {
   background: white;
   border: 1px solid #ccc;
   border-radius: 4px;
+}
+
+.tooltip {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-size: 14px;
+  z-index: 100;
+  max-width: 200px;
+  color: #264653;
+}
+
+.graph-container {
+  position: relative;
 }
 </style>
