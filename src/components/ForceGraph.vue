@@ -2,9 +2,11 @@
   <client-only>
     <div class="graph-wrapper">
 
-      <div v-if="selectedNode || selectedLink" class="side-menu">
-      <div class="menu-header">
-          <h3>{{ selectedNode ? 'Node Details' : 'Link Details' }}</h3>
+      <div v-if="selectedNode || selectedConnection" class="side-menu">
+        <div class="menu-header">
+          <h3>
+            {{ selectedNode ? 'Node Details' : 'Connection Details' }}
+          </h3>
           <button @click="clearSelection">×</button>
         </div>
         <div class="menu-content">
@@ -15,14 +17,23 @@
             <pre>{{ selectedNode }}</pre>
           </div>
           
-          <!-- Link Details -->
-          <div v-if="selectedLink">
-            <p>Source: {{ selectedLink.source.id }}</p>
-            <p>Target: {{ selectedLink.target.id }}</p>
-            <pre>{{ selectedLink }}</pre>
+          <!-- Connection Details -->
+          <div v-if="selectedConnection">
+            <p>Between:</p>
+            <ul>
+              <li>{{ selectedConnection.nodes[0].id }}</li>
+              <li>{{ selectedConnection.nodes[1].id }}</li>
+            </ul>
+            
+            <h4>All Links ({{ selectedConnection.links.length }}):</h4>
+            <div 
+              v-for="(link, index) in selectedConnection.links" 
+              :key="index"
+              class="link-item"
+            >
+              <pre>{{ link }}</pre>
+            </div>
           </div>
-
-
         </div>
       </div>
 
@@ -65,7 +76,7 @@ export default {
       hoveredElement: null,
       mousePosition: { x: 0, y: 0 },
       selectedNode: null,
-      selectedLink: null,
+      selectedConnection: null,
     }
   },
   mounted() {
@@ -100,7 +111,7 @@ export default {
     },
     clearSelection() {
       this.selectedNode = null
-      this.selectedLink = null
+      this.selectedConnection = null
     },
     resetZoom() {
       const svg = this.d3.select(this.$refs.graphContainer).select('svg')
@@ -192,12 +203,6 @@ export default {
         })
         .on('mousemove', this.updateMousePosition)
 
-      node
-        .on('click', (event, d) => {
-        this.selectedNode = d
-        event.stopPropagation() // Prevent background click
-      })
-
       // Add hover handlers to links
       link
         .on('mouseover', (event, d) => {
@@ -209,18 +214,35 @@ export default {
         })
         .on('mousemove', this.updateMousePosition)
 
-      link
-        .on('click', (event, d) => {
-        this.selectedLink = d
-        this.selectedNode = null  // Clear node selection
+      // Update existing node click handler
+      node
+      .on('click', (event, d) => {
+        this.selectedNode = d
+        this.selectedConnection = null  // Clear link selection
         event.stopPropagation()
       })
 
-      // Update existing node click handler
-      node.on('click', (event, d) => {
-        this.selectedNode = d
-        this.selectedLink = null  // Clear link selection
+      link
+      .on('click', (event, clickedLink) => {
         event.stopPropagation()
+        
+        // Find all links between these two nodes (both directions)
+        const nodePair = [
+          clickedLink.source.id, 
+          clickedLink.target.id
+        ].sort().join('|')
+        
+        const allLinks = this.processedLinks.filter(l => {
+          const currentPair = [l.source.id, l.target.id].sort().join('|')
+          return currentPair === nodePair
+        })
+
+        this.selectedConnection = {
+          nodes: [clickedLink.source, clickedLink.target],
+          links: allLinks
+        }
+        
+        this.selectedNode = null
       })
 
       const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
@@ -321,6 +343,7 @@ export default {
   align-items: center;
   padding: 15px;
   border-bottom: 1px solid #eee;
+  color:#264653
 }
 
 .menu-header button {
@@ -341,5 +364,17 @@ export default {
   margin-left: 300px; /* Match side menu width */
   height: 100vh;
   position: relative;
+}
+
+.link-item {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.link-item pre {
+  margin: 0;
+  font-size: 0.9em;
 }
 </style>
