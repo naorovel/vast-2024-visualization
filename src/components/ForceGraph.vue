@@ -2,23 +2,21 @@
   <client-only>
     <div class="graph-wrapper">
 
-    <div class="filter-panel">
-        <h4>Bias Filters (hover for info):</h4>
+      <div class="filter-panel">
+        <h4>Exclude Bias Types:</h4>
         <div 
           v-for="bias in allBiasTypes" 
           :key="bias"
           class="filter-item"
         >
-          <label :title="biasDescriptions[bias] || 'No description available'">
+          <label :title="`Exclude links containing ${formatBiasName(bias)}`">
             <input
               type="checkbox"
               v-model="selectedBiases"
               :value="bias"
             >
-            <span 
-              class="bias-color-indicator"
-              :style="{backgroundColor: biasColorScale(bias)}"
-            ></span>
+            <span class="bias-color-indicator" 
+                  :style="{backgroundColor: biasColorScale(bias)}"></span>
             {{ formatBiasName(bias) }}
           </label>
         </div>
@@ -160,10 +158,15 @@ export default {
   },
   computed: {
     filteredLinks() {
-      if (!this.selectedBiases.length) return this.links;
-      return this.links.filter(link => 
-        this.selectedBiases.some(bias => link.has_bias?.[bias])
-      );
+          // Get excluded biases
+          const excludedBiases = this.allBiasTypes.filter(
+            bias => !this.selectedBiases.includes(bias)
+          );
+          
+          // Filter out links containing excluded biases
+          return this.links.filter(link => 
+            !excludedBiases.some(bias => link.bias_types?.[bias])
+          );
     },
     allBiasTypes() {
       const biasSet = new Set();
@@ -181,14 +184,23 @@ export default {
     allBiasTypes: {
       immediate: true,
       handler(newVal) {
-        // Set initial selected biases to all available
+        // Initialize with all biases selected
         if (newVal.length && this.selectedBiases.length === 0) {
           this.selectedBiases = [...newVal];
         }
-        // Update color scale
         this.biasColorScale.domain(newVal);
       }
-    }    
+    },
+    selectedBiases: {
+      handler() {
+        // Force color update on all links
+        this.zoomGroup.selectAll('line')
+          .transition()
+          .duration(300)
+          .attr('stroke', d => this.getLinkColor(d));
+      },
+      deep: true
+    }
   },
   mounted() {
     if (process.client) {
@@ -447,39 +459,62 @@ export default {
 
     updateGraphData(filteredLinks) {
       if (!this.d3 || !this.simulation) return;
+
+      // Clear existing simulation
+      this.simulation.stop();
       
-      // Process new links
-      const nodeMap = new Map(this.nodes.map(node => [node.id, node]));
-      this.processedLinks = filteredLinks.map(link => {
-        const source = nodeMap.get(link.source);
-        const target = nodeMap.get(link.target);
-        return source && target ? { ...link, source, target } : null;
-      }).filter(Boolean);
+      // Process new links with proper node references
+      const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
+      this.processedLinks = filteredLinks.map(link => ({
+        ...link,
+        source: nodeMap.get(link.source),
+        target: nodeMap.get(link.target)
+      }));
 
-      // Update simulation
-      this.simulation.force('link').links(this.processedLinks);
-      this.simulation.alpha(1).restart();
+      // Force simulation reset
+      this.simulation.nodes(this.nodes)
+        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id))
+        .alpha(1)
+        .restart();
 
-      // Update links visualization with colors
+      // Update links with proper key function
       const links = this.zoomGroup.selectAll('line')
-        .data(this.processedLinks)
-        .join(
-          enter => enter.append('line')
-            .attr('stroke', d => this.getLinkColor(d))
-            .attr('stroke-width', 5)
-            .attr('stroke-opacity', 0.7)
-            .attr('pointer-events', 'visible'),
-          update => update.attr('stroke', d => this.getLinkColor(d)),
-          exit => exit.remove()
-        );
+        .data(this.processedLinks, d => `${d.source.id}-${d.target.id}-${d.type}`);
 
-      // Preserve interactions
-      links
-        .on('mouseover', (event, d) => {
-          this.hoveredElement = { type: 'link', data: d };
-          this.updateMousePosition(event);
-        })
-        .on('click', this.handleLinkClick);
+      // Remove old links with transition
+      links.exit()
+        .transition()
+        .duration(500)
+        .style('opacity', 0)
+        .remove();
+
+      // Add new links
+      const enterLinks = links.enter()
+        .append('line')
+        .attr('stroke', d => this.getLinkColor(d))
+        .attr('stroke-width', 5)
+        .style('opacity', 0)
+        .call(sel => {
+          sel.on('mouseover', (event, d) => {
+            this.hoveredElement = { type: 'link', data: d };
+            this.updateMousePosition(event);
+          });
+        });
+
+      // Update all links (existing + new)
+      links.merge(enterLinks)
+        .transition()
+        .duration(500)
+        .style('opacity', 0.7)
+        .attr('stroke', d => this.getLinkColor(d))
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+
+      console.log('Updating graph with:', filteredLinks.length, 'links');
+      console.log('Sample link:', filteredLinks[0]);
+      console.log('Selected biases:', this.selectedBiases);
     },
 
     handleLinkClick(event, clickedLink) {
@@ -504,19 +539,22 @@ export default {
     getLinkColor(link) {
       if (!link.bias_types || !this.selectedBiases.length) return '#2a9d8f';
       
-      // Get selected biases present in this link
+      // Filter biases to only selected ones
       const activeBiases = Object.entries(link.bias_types)
         .filter(([bias]) => this.selectedBiases.includes(bias));
-      
+
+      if (activeBiases.length === 0) return '#2a9d8f';
+
       // Find bias with longest array
       const prominentBias = activeBiases.sort((a, b) => 
         b[1].length - a[1].length
-      )[0]?.[0];
-      
-      return prominentBias 
-        ? this.biasColorScale(prominentBias)
-        : '#2a9d8f';
-    },
+      )[0][0];
+
+      const color = this.biasColorScale(prominentBias);
+      console.log(`Link ${link.source.id}-${link.target.id} color:`, color);
+
+      return color;
+    }
   }
 }
 </script>
@@ -657,6 +695,7 @@ pre {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  color:#264653
 }
 
 .filter-item input {
@@ -685,10 +724,28 @@ pre {
   border: 1px solid #ddd;
 }
 
-.filter-item label:hover {
-  cursor: help; /* Question mark cursor for tooltip */
+.filter-item label {
+  color: #264653; /* Dark blue */
+  font-weight: 500;
 }
 
+.filter-item label {
+  transition: color 0.2s ease;
+}
+
+.filter-item label:hover {
+  color: #e76f51; /* Your coral color on hover */
+}
+
+.filter-panel h4 {
+  color: #2a9d8f; /* Your teal color */
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.filter-item input[type="checkbox"] {
+  accent-color: #2a9d8f; /* Match your color scheme */
+}
 
 .legend {
   position: fixed;
@@ -722,5 +779,8 @@ pre {
   font-size: 0.9em;
 }
 
+line {
+  transition: stroke 0.5s ease, opacity 0.5s ease;
+}
 
 </style>
