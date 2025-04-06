@@ -2,23 +2,24 @@
   <client-only>
     <div class="graph-wrapper">
 
-      <div class="filter-panel">
-        <h4>Filter by Bias Type:</h4>
-        <div 
-          v-for="bias in allBiasTypes" 
-          :key="bias"
-          class="filter-item"
-        >
-          <label>
-            <input
-              type="checkbox"
-              v-model="selectedBiases"
-              :value="bias"
-            >
-            {{ formatBiasName(bias) }}
-          </label>
-        </div>
-      </div>      
+    <div class="filter-panel">
+      <h4>Filter by Bias Type:</h4>
+      <div 
+        v-for="bias in allBiasTypes" 
+        :key="bias"
+        class="filter-item"
+      >
+        <label :title="biasDescriptions[bias] || 'No description available'">
+          <input
+            type="checkbox"
+            v-model="selectedBiases"
+            :value="bias"
+          >
+          <span class="bias-color-indicator" 
+                :style="{backgroundColor: biasColorScale(bias)}"></span>
+          {{ formatBiasName(bias) }}
+        </label>
+      </div>
 
       <div v-if="selectedNode || selectedConnection" class="side-menu">
         <div class="menu-header">
@@ -126,6 +127,8 @@
 
 
 <script>
+
+import * as d3 from 'd3';
 export default {
   props: {
     nodes: { type: Array, required: true },
@@ -143,6 +146,13 @@ export default {
       selectedNode: null,
       selectedConnection: null,
       selectedBiases: [],
+      biasColorScale: d3.scaleOrdinal()
+        .domain([]) // Will be set dynamically
+        .range(d3.schemeCategory10),
+      biasDescriptions: {
+        confirmation_bias: "Tendency to search for information confirming existing beliefs",
+        authority_bias: "Over-reliance on authority figures' opinions",
+      }
     }
   },
   computed: {
@@ -165,10 +175,15 @@ export default {
     }
   },
   watch: {
-    // Add watcher
     filteredLinks: {
       handler(newLinks) {
         this.updateGraphData(newLinks);
+      },
+      immediate: true
+    },
+    allBiasTypes: {
+      handler(biases) {
+        this.biasColorScale.domain(biases);
       },
       immediate: true
     }
@@ -290,8 +305,8 @@ export default {
         .selectAll('line')
         .data(this.processedLinks)
         .join('line')
-        .attr('stroke', '#2a9d8f')
-        .attr('stroke-width', 5) // Increased hit area
+        .attr('stroke', d => this.getLinkColor(d))
+        .attr('stroke-width', 5)
         .attr('stroke-opacity', 0.3) // Keep visible but subtle
         .attr('pointer-events', 'visible');
 
@@ -482,8 +497,14 @@ export default {
         links: allLinks
       };
       this.selectedNode = null;
-    }
+    },
 
+    getLinkColor(link) {
+      const biases = Object.keys(link.bias_types || {});
+      return biases.length > 0 
+        ? this.biasColorScale(biases[0]) // Or combine colors for multiple biases
+        : '#2a9d8f'; // Default color
+    },
   }
 }
 </script>
@@ -642,5 +663,52 @@ pre {
   color: #666;
   margin-left: 12px;
 }
+
+.bias-color-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 8px;
+  border: 1px solid #ddd;
+}
+
+.filter-item label:hover {
+  cursor: help; /* Question mark cursor for tooltip */
+}
+
+
+.legend {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: white;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 1000;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 5px 0;
+}
+
+.legend-color {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  margin-right: 10px;
+  border: 1px solid #ddd;
+}
+
+.legend-label {
+  font-size: 0.9em;
+}
+
 
 </style>
