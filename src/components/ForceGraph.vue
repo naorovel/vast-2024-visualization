@@ -20,6 +20,7 @@
           {{ formatBiasName(bias) }}
         </label>
       </div>
+    </div>
 
       <div v-if="selectedNode || selectedConnection" class="side-menu">
         <div class="menu-header">
