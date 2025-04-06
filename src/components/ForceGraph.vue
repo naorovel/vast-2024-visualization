@@ -3,24 +3,26 @@
     <div class="graph-wrapper">
 
     <div class="filter-panel">
-      <h4>Filter by Bias Type:</h4>
-      <div 
-        v-for="bias in allBiasTypes" 
-        :key="bias"
-        class="filter-item"
-      >
-        <label :title="biasDescriptions[bias] || 'No description available'">
-          <input
-            type="checkbox"
-            v-model="selectedBiases"
-            :value="bias"
-          >
-          <span class="bias-color-indicator" 
-                :style="{backgroundColor: biasColorScale(bias)}"></span>
-          {{ formatBiasName(bias) }}
-        </label>
+        <h4>Bias Filters (hover for info):</h4>
+        <div 
+          v-for="bias in allBiasTypes" 
+          :key="bias"
+          class="filter-item"
+        >
+          <label :title="biasDescriptions[bias] || 'No description available'">
+            <input
+              type="checkbox"
+              v-model="selectedBiases"
+              :value="bias"
+            >
+            <span 
+              class="bias-color-indicator"
+              :style="{backgroundColor: biasColorScale(bias)}"
+            ></span>
+            {{ formatBiasName(bias) }}
+          </label>
+        </div>
       </div>
-    </div>
 
       <div v-if="selectedNode || selectedConnection" class="side-menu">
         <div class="menu-header">
@@ -164,30 +166,29 @@ export default {
       );
     },
     allBiasTypes() {
-      const biases = new Set();
-      this.links.forEach(link => {
+      const biasSet = new Set();
+      this.links?.forEach(link => {
         if (link.bias_types) {
           Object.keys(link.bias_types).forEach(bias => {
-            if (bias in link.has_bias) biases.add(bias);
+            biasSet.add(bias);
           });
         }
       });
-      return Array.from(biases).sort();
+      return Array.from(biasSet).sort();
     }
   },
   watch: {
-    filteredLinks: {
-      handler(newLinks) {
-        this.updateGraphData(newLinks);
-      },
-      immediate: true
-    },
     allBiasTypes: {
-      handler(biases) {
-        this.biasColorScale.domain(biases);
-      },
-      immediate: true
-    }
+      immediate: true,
+      handler(newVal) {
+        // Set initial selected biases to all available
+        if (newVal.length && this.selectedBiases.length === 0) {
+          this.selectedBiases = [...newVal];
+        }
+        // Update color scale
+        this.biasColorScale.domain(newVal);
+      }
+    }    
   },
   mounted() {
     if (process.client) {
@@ -459,20 +460,20 @@ export default {
       this.simulation.force('link').links(this.processedLinks);
       this.simulation.alpha(1).restart();
 
-      // Update links visualization
+      // Update links visualization with colors
       const links = this.zoomGroup.selectAll('line')
         .data(this.processedLinks)
         .join(
           enter => enter.append('line')
-            .attr('stroke', '#2a9d8f')
+            .attr('stroke', d => this.getLinkColor(d))
             .attr('stroke-width', 5)
-            .attr('stroke-opacity', 0.3)
+            .attr('stroke-opacity', 0.7)
             .attr('pointer-events', 'visible'),
-          update => update,
+          update => update.attr('stroke', d => this.getLinkColor(d)),
           exit => exit.remove()
         );
 
-      // Update link interactions
+      // Preserve interactions
       links
         .on('mouseover', (event, d) => {
           this.hoveredElement = { type: 'link', data: d };
@@ -501,10 +502,20 @@ export default {
     },
 
     getLinkColor(link) {
-      const biases = Object.keys(link.bias_types || {});
-      return biases.length > 0 
-        ? this.biasColorScale(biases[0]) // Or combine colors for multiple biases
-        : '#2a9d8f'; // Default color
+      if (!link.bias_types || !this.selectedBiases.length) return '#2a9d8f';
+      
+      // Get selected biases present in this link
+      const activeBiases = Object.entries(link.bias_types)
+        .filter(([bias]) => this.selectedBiases.includes(bias));
+      
+      // Find bias with longest array
+      const prominentBias = activeBiases.sort((a, b) => 
+        b[1].length - a[1].length
+      )[0]?.[0];
+      
+      return prominentBias 
+        ? this.biasColorScale(prominentBias)
+        : '#2a9d8f';
     },
   }
 }
