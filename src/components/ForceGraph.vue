@@ -281,9 +281,9 @@ export default {
       
       // Create simulation
       this.simulation = this.d3.forceSimulation()
-        .force('charge', this.d3.forceManyBody().strength(-1000))
+        .force('charge', this.d3.forceManyBody().strength(-10000))
         .force('center', this.d3.forceCenter(width / 2, height / 2))
-        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(200))
+        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(1000))
         .force('collision', this.d3.forceCollide().radius(5))
 
       const nodeGroups = this.zoomGroup
