@@ -3,22 +3,58 @@
     <div class="graph-wrapper">
 
       <div class="filter-panel">
-        <h4>Exclude Bias Types:</h4>
-        <div 
-          v-for="bias in allBiasTypes" 
-          :key="bias"
-          class="filter-item"
-        >
-          <label :title="`Exclude links containing ${formatBiasName(bias)}`">
-            <input
-              type="checkbox"
-              v-model="selectedBiases"
-              :value="bias"
-            >
-            <span class="bias-color-indicator" 
-                  :style="{backgroundColor: biasColorScale(bias)}"></span>
-            {{ formatBiasName(bias) }}
-          </label>
+        <h4>Filters</h4>
+        
+        <!-- Existing bias filter -->
+        <div class="filter-group">
+          <label>Bias Types:</label>
+          <select v-model="selectedBiases" multiple class="filter-select">
+             <option 
+                v-for="bias in allBiasTypes" 
+                :key="bias" 
+                :value="bias"
+                :style="{ color: biasColorScale(bias) }"
+              >
+                █ {{ formatBiasName(bias) }}
+              </option>
+          </select>
+        </div>
+
+        <!-- New filters -->
+        <div class="filter-group">
+          <label>Algorithms:</label>
+          <select v-model="selectedAlgorithms" multiple class="filter-select">
+            <option v-for="alg in allAlgorithms" :key="alg" :value="alg">
+              {{ alg }}
+            </option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Sources:</label>
+          <select v-model="selectedSources" multiple class="filter-select">
+            <option v-for="src in allSources" :key="src" :value="src">
+              {{ src }}
+            </option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Last Edited By:</label>
+          <select v-model="selectedEditors" multiple class="filter-select">
+            <option v-for="editor in allEditors" :key="editor" :value="editor">
+              {{ editor }}
+            </option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Connection Types:</label>
+          <select v-model="selectedTypes" multiple class="filter-select">
+            <option v-for="type in allTypes" :key="type" :value="type">
+              {{ type }}
+            </option>
+          </select>
         </div>
       </div>
 
@@ -147,26 +183,57 @@ export default {
       selectedNode: null,
       selectedConnection: null,
       selectedBiases: [],
+      selectedAlgorithms: [],
+      selectedSources: [],
+      selectedEditors: [],
+      selectedTypes: [],
       biasColorScale: d3.scaleOrdinal()
         .domain([]) // Will be set dynamically
         .range(d3.schemeCategory10),
       biasDescriptions: {
         confirmation_bias: "Tendency to search for information confirming existing beliefs",
         authority_bias: "Over-reliance on authority figures' opinions",
-      }
+      },
+      showRawLinkData: false,
+
     }
   },
   computed: {
     filteredLinks() {
-          // Get excluded biases
-          const excludedBiases = this.allBiasTypes.filter(
-            bias => !this.selectedBiases.includes(bias)
-          );
-          
-          // Filter out links containing excluded biases
-          return this.links.filter(link => 
-            !excludedBiases.some(bias => link.bias_types?.[bias])
-          );
+      return this.links.filter(link => {
+        // Bias filter
+        const hasBias = this.selectedBiases.length === 0 || 
+                      (link.bias_types && 
+                        Object.keys(link.bias_types).some(b => 
+                          this.selectedBiases.includes(b)));
+
+        // Algorithm filter
+        const hasAlgorithm = this.selectedAlgorithms.length === 0 ||
+                            (!this.selectedAlgorithms.length && !link.algorithm) || 
+                            (link.algorithm && 
+                            this.selectedAlgorithms.some(a => 
+                              link.algorithm.includes(a)));
+
+        // Source filter
+        const hasSource = this.selectedSources.length === 0 ||
+                        (!this.selectedSources.length && !link.raw_source) ||
+                        (link.raw_source && 
+                          this.selectedSources.includes(link.raw_source));
+
+        // Editor filter
+        const hasEditor = this.selectedEditors.length === 0 ||
+                        (!this.selectedEditors.length && !link.last_edited_by) ||
+                        (link.last_edited_by && 
+                          this.selectedEditors.includes(link.last_edited_by));
+
+        // Type filter
+        const hasType = this.selectedTypes.length === 0 ||
+                      (!this.selectedTypes.length && !link.type) ||
+                      (link.type && 
+                        this.selectedTypes.includes(link.type));
+
+        return hasBias && hasAlgorithm && hasSource && hasEditor && hasType;
+      });
     },
     allBiasTypes() {
       const biasSet = new Set();
@@ -178,9 +245,36 @@ export default {
         }
       });
       return Array.from(biasSet).sort();
-    }
+    },
+      allAlgorithms() {
+      return [...new Set(this.links.flatMap(l => l.algorithm || []))];
+      },
+      allSources() {
+        return [...new Set(this.links.flatMap(l => l.raw_source || []))];
+      },
+      allEditors() {
+        return [...new Set(this.links.flatMap(l => l.last_edited_by || []))];
+      },
+      allTypes() {
+        return [...new Set(this.links.flatMap(l => l.type || []))];
+      },
   },
   watch: {
+    selectedAlgorithms: 'refreshGraph',
+    selectedSources: 'refreshGraph',
+    selectedEditors: 'refreshGraph',
+    selectedTypes: 'refreshGraph',
+    filteredLinks: {
+      handler(newLinks) {
+        if (this.d3) {
+          this.processLinks();
+          this.resetSimulation();
+          this.updateGraphData(newLinks);
+        }
+      },
+      immediate: true,
+      deep: true
+    },
     allBiasTypes: {
       immediate: true,
       handler(newVal) {
@@ -213,11 +307,35 @@ export default {
         console.log('All Links:', this.links)
         console.log('All Bias Types:', this.allBiasTypes)
         console.log('First Link Bias:', this.links[0]?.bias_types)
-    })
-  }
+      })
+    }
   },
   methods: {
     // Zoom methods
+    refreshGraph() {
+      this.processLinks();
+      this.updateGraphData(this.filteredLinks);
+    },
+
+    resetSimulation() {
+        if (!this.d3 || !this.simulation) return;
+
+        // Stop existing simulation
+        this.simulation.stop();
+        
+        // Get current dimensions
+        const { width, height } = this.getDimensions();
+
+        // Reinitialize forces
+        this.simulation
+          .force('charge', this.d3.forceManyBody().strength(-10000))
+          .force('center', this.d3.forceCenter(width / 2, height / 2))
+          .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
+          .force('collision', this.d3.forceCollide().radius(5));
+
+        // Restart with fresh alpha
+        this.simulation.alpha(1).restart();
+    },
     initZoom() {
       const svg = this.d3.select(this.$refs.graphContainer).select('svg')
 
@@ -248,11 +366,24 @@ export default {
     },
     processLinks() {
       const nodeMap = new Map(this.nodes.map(node => [node.id, node]))
-      this.processedLinks = this.links.map(link => {
-        const source = nodeMap.get(link.source)
-        const target = nodeMap.get(link.target)
-        return source && target ? { ...link, source, target } : null
-      }).filter(Boolean)
+      this.processedLinks = this.filteredLinks
+        .map(link => {
+          // Handle both ID references and object references
+          const source = nodeMap.get(link.source?.id || link.source);
+          const target = nodeMap.get(link.target?.id || link.target);
+          
+          if (!source || !target) {
+            console.warn('Invalid link:', link);
+            return null;
+          }
+          
+          return {
+            ...link,
+            source,
+            target
+          };
+        })
+        .filter(Boolean);
     },
     getDimensions() {
       return {
@@ -416,7 +547,13 @@ export default {
 
       const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
       svg_mouse.on('mousemove', this.updateMousePosition)
-      
+     
+      this.simulation.on('end', () => {
+        this.nodes.forEach(n => {
+          n.fx = null;
+          n.fy = null;
+        });
+      });
     },
 
     dragHandler() {
@@ -460,9 +597,6 @@ export default {
     updateGraphData(filteredLinks) {
       if (!this.d3 || !this.simulation) return;
 
-      // Clear existing simulation
-      this.simulation.stop();
-      
       // Process new links with proper node references
       const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
       this.processedLinks = filteredLinks.map(link => ({
@@ -471,37 +605,42 @@ export default {
         target: nodeMap.get(link.target)
       }));
 
-      // Force simulation reset
-      this.simulation.nodes(this.nodes)
-        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id))
-        .alpha(1)
+      // Update simulation forces
+      this.simulation
+        // .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
+        // .alpha(1)
         .restart();
+      
+      const nodePositions = new Map(this.nodes.map(n => [n.id, { x: n.x, y: n.y }]));
 
-      // Update links with proper key function
+      // Get current dimensions
+      const { width, height } = this.getDimensions();
+
+      // DATA JOIN with proper key function
       const links = this.zoomGroup.selectAll('line')
-        .data(this.processedLinks, d => `${d.source.id}-${d.target.id}-${d.type}`);
+        .data(this.processedLinks, d => 
+          `${d.source?.id}-${d.target?.id}-${d.type}`
+        );
 
-      // Remove old links with transition
+      // EXIT old links
       links.exit()
         .transition()
         .duration(500)
         .style('opacity', 0)
         .remove();
 
-      // Add new links
+      // ENTER new links
       const enterLinks = links.enter()
         .append('line')
         .attr('stroke', d => this.getLinkColor(d))
         .attr('stroke-width', 5)
         .style('opacity', 0)
-        .call(sel => {
-          sel.on('mouseover', (event, d) => {
-            this.hoveredElement = { type: 'link', data: d };
-            this.updateMousePosition(event);
-          });
+        .on('mouseover', (event, d) => {
+          this.hoveredElement = { type: 'link', data: d };
+          this.updateMousePosition(event);
         });
 
-      // Update all links (existing + new)
+      // UPDATE existing + new links
       links.merge(enterLinks)
         .transition()
         .duration(500)
@@ -512,9 +651,34 @@ export default {
         .attr('x2', d => d.target.x)
         .attr('y2', d => d.target.y);
 
-      console.log('Updating graph with:', filteredLinks.length, 'links');
-      console.log('Sample link:', filteredLinks[0]);
-      console.log('Selected biases:', this.selectedBiases);
+      // Restart simulation with new data
+      this.simulation
+        .nodes(this.nodes)
+        .force('link', this.d3.forceLink(this.processedLinks))
+        .alphaTarget(0.3)
+        .restart();
+
+          // Restore positions after data update
+      this.nodes.forEach(n => {
+        const pos = nodePositions.get(n.id);
+        if (pos) {
+          n.x = pos.x;
+          n.y = pos.y;
+          n.fx = pos.x;
+          n.fy = pos.y;
+        }
+      });
+
+      this.simulation.alpha(0.5).restart();
+
+      console.log('Active links:', this.processedLinks.length);
+      console.log('Sample link:', this.processedLinks[0]);
+      console.log('Processed links:', this.processedLinks);
+      console.log('First processed link:', this.processedLinks[0] && {
+        source: this.processedLinks[0].source?.id,
+        target: this.processedLinks[0].target?.id,
+        type: this.processedLinks[0].type
+  });
     },
 
     handleLinkClick(event, clickedLink) {
@@ -537,24 +701,24 @@ export default {
     },
 
     getLinkColor(link) {
-      if (!link.bias_types || !this.selectedBiases.length) return '#2a9d8f';
-      
-      // Filter biases to only selected ones
+      // Add null checks
+      if (!link?.bias_types || this.selectedBiases.length === 0) {
+        return '#2a9d8f';
+      }
+
       const activeBiases = Object.entries(link.bias_types)
         .filter(([bias]) => this.selectedBiases.includes(bias));
 
       if (activeBiases.length === 0) return '#2a9d8f';
 
-      // Find bias with longest array
-      const prominentBias = activeBiases.sort((a, b) => 
-        b[1].length - a[1].length
-      )[0][0];
+      // Handle empty bias values
+      const prominentBias = activeBiases.reduce((prev, current) => 
+        (prev[1].length > current[1].length) ? prev : current
+      )[0];
 
-      const color = this.biasColorScale(prominentBias);
-      console.log(`Link ${link.source.id}-${link.target.id} color:`, color);
-
-      return color;
+      return this.biasColorScale(prominentBias);
     }
+    
   }
 }
 </script>
@@ -780,7 +944,46 @@ pre {
 }
 
 line {
-  transition: stroke 0.5s ease, opacity 0.5s ease;
+  stroke-opacity: 0.7 !important;
+  stroke-width: 3px !important;
 }
 
+.filter-panel {
+  width: 300px;
+  padding: 15px;
+}
+
+.filter-group {
+  margin-bottom: 15px;
+}
+
+.filter-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #2a9d8f;
+}
+
+.filter-select {
+  width: 100%;
+  min-height: 100px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+}
+
+.filter-select option {
+  padding: 3px;
+  cursor: pointer;
+}
+
+.filter-select option:hover {
+  background-color: #f0f0f0;
+}
+
+line.exit {
+  opacity: 0 !important;
+  pointer-events: none;
+}
 </style>
