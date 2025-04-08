@@ -6,7 +6,7 @@
         <h4>Filters</h4>
         
         <!-- Existing bias filter -->
-        <div class="filter-group">
+        <!-- <div class="filter-group">
           <label>Bias Types:</label>
           <select v-model="selectedBiases" multiple class="filter-select">
              <option 
@@ -18,7 +18,7 @@
                 █ {{ formatBiasName(bias) }}
               </option>
           </select>
-        </div>
+        </div> -->
 
         <!-- New filters -->
         <div class="filter-group">
@@ -58,11 +58,33 @@
         </div>
       </div>
 
-      <div v-if="selectedNode || selectedConnection" class="side-menu">
+      <div class="bias-chart-panel">
+        <h4>Bias Frequency</h4>
+        <div 
+          v-for="item in biasFrequency" 
+          :key="item.bias" 
+          class="bar-item"
+        >
+          <div class="bar-label">
+            {{ formatBiasName(item.bias) }} ({{ item.count }})
+          </div>
+          <div class="bar-container">
+            <div 
+              class="bar" 
+              :style="{ 
+                width: `${(item.count / maxBiasCount) * 100}%`,
+                backgroundColor: biasColorScale(item.bias)
+              }"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-menu">
         <div class="menu-header">
-          <h3>
+          <h2>
             {{ selectedNode ? 'Node Details' : 'Connection Details' }}
-          </h3>
+          </h2>
           <button @click="clearSelection">×</button>
         </div>
         <div class="menu-content">
@@ -75,7 +97,7 @@
           
           <!-- Connection Details -->
           <div v-if="selectedConnection">
-            <p>Between:</p>
+            <h3>Between:</h3>
             <ul>
               <li>{{ selectedConnection.nodes[0].id }}</li>
               <li>{{ selectedConnection.nodes[1].id }}</li>
@@ -195,6 +217,7 @@ export default {
         authority_bias: "Over-reliance on authority figures' opinions",
       },
       showRawLinkData: false,
+      filteredNodes: [],
 
     }
   },
@@ -203,10 +226,10 @@ export default {
       return this.links.filter(link => {
         // Bias filter
         const hasBias = this.selectedBiases.length === 0 || 
-                      (link.bias_types && 
-                        this.selectedBiases.some(b => 
-                          Object.keys(link.bias_types).includes(b)
-                        ));
+                        (link.bias_types && 
+                          Object.keys(link.bias_types).some(b => 
+                            this.selectedBiases.includes(b)
+                          ));
 
         // Algorithm filter
         const hasAlgorithm = this.selectedAlgorithms.length === 0 ||
@@ -257,6 +280,22 @@ export default {
       allTypes() {
         return [...new Set(this.links.flatMap(l => l.type || []))];
       },
+     biasFrequency() {
+        const counts = {};
+        this.filteredLinks.forEach(link => {
+          if (link.bias_types) {
+            Object.keys(link.bias_types).forEach(bias => {
+              counts[bias] = (counts[bias] || 0) + 1;
+            });
+          }
+        });
+        return this.allBiasTypes
+          .map(bias => ({ bias, count: counts[bias] || 0 }))
+          .sort((a, b) => b.count - a.count);
+      },
+      maxBiasCount() {
+        return Math.max(...this.biasFrequency.map(i => i.count), 1);
+      },
   },
   watch: {
     selectedAlgorithms: 'refreshGraph',
@@ -289,11 +328,12 @@ export default {
     },
     selectedBiases: {
       handler() {
-        // Force color update on all links
-        this.zoomGroup.selectAll('line')
+        this.$nextTick(() => {
+          this.zoomGroup.selectAll('line')
           .transition()
           .duration(300)
           .attr('stroke', d => this.getLinkColor(d));
+        })
       },
       deep: true
     }
@@ -376,6 +416,8 @@ export default {
     },
     processLinks() {
       const nodeMap = new Map(this.nodes.map(node => [node.id, node]));
+
+
       this.processedLinks = this.filteredLinks
         .map(link => {
           try {
@@ -398,11 +440,19 @@ export default {
           }
         })
         .filter(Boolean);
+
+        // Collect nodes from processedLinks
+        const nodeIds = new Set();
+        this.processedLinks.forEach(link => {
+          nodeIds.add(link.source.id);
+          nodeIds.add(link.target.id);
+        });
+        this.filteredNodes = this.nodes.filter(node => nodeIds.has(node.id));
     },
     getDimensions() {
       return {
         width: this.$refs.graphContainer.clientWidth,
-        height: 1080
+        height: this.$refs.graphContainer.clientHeight,
       };
     },
 
@@ -574,7 +624,7 @@ export default {
       });
 
       this.simulation
-        .nodes(this.nodes)
+        .nodes(this.filteredNodes)
         .alpha(0.5)
         .restart();
     },
@@ -878,6 +928,8 @@ line {
   border: 1px solid #ccc;
   border-radius: 4px;
   background: white;
+  color:#264653
+
 }
 
 .filter-select option {
@@ -892,5 +944,78 @@ line {
 line.exit {
   opacity: 0 !important;
   pointer-events: none;
+}
+
+.bias-chart-panel {
+  position: fixed;
+  left: 320px;
+  top: 20px;
+  background: white;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 1000;
+  max-width: 300px;
+}
+
+.bar-item {
+  margin: 8px 0;
+}
+
+.bar-label {
+  font-size: 0.9em;
+  color: #264653;
+  margin-bottom: 4px;
+}
+
+.bar-container {
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Style the select box itself */
+.filter-select {
+  border: 1px solid #a5d6a7; /* Light muted green border */
+  background-color: #f1f8e9; /* Very light green background */
+}
+
+/* Style when dropdown is open */
+.filter-select:active, 
+.filter-select:focus {
+  border-color: #66bb6a; /* Medium muted green */
+}
+
+/* Scrollbar styling for the dropdown */
+.filter-select::-webkit-scrollbar {
+  width: 8px;
+}
+
+.filter-select::-webkit-scrollbar-thumb {
+  background: #a5d6a7; /* Muted green scrollbar */
+  border-radius: 4px;
+}
+
+/* Special styling for the bias filter */
+.bias-filter option:checked {
+  background-color: #e8f5e9 !important;
+  color: #2e7d32 !important;
+  font-weight: 600;
+  position: relative;
+}
+
+/* Add checkmark indicator */
+.bias-filter option:checked::after {
+  content: "✓";
+  position: absolute;
+  right: 8px;
+  color: #388e3c; /* Slightly brighter green */
 }
 </style>
