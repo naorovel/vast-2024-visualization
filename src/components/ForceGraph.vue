@@ -204,31 +204,30 @@ export default {
         // Bias filter
         const hasBias = this.selectedBiases.length === 0 || 
                       (link.bias_types && 
-                        Object.keys(link.bias_types).some(b => 
-                          this.selectedBiases.includes(b)));
+                        this.selectedBiases.some(b => 
+                          Object.keys(link.bias_types).includes(b)
+                        ));
 
         // Algorithm filter
         const hasAlgorithm = this.selectedAlgorithms.length === 0 ||
-                            (!this.selectedAlgorithms.length && !link.algorithm) || 
                             (link.algorithm && 
                             this.selectedAlgorithms.some(a => 
-                              link.algorithm.includes(a)));
+                              link.algorithm === a || // Handle string
+                              link.algorithm.includes(a) // Handle array
+                            ));
 
-        // Source filter
+        // Source filter (exact match)
         const hasSource = this.selectedSources.length === 0 ||
-                        (!this.selectedSources.length && !link.raw_source) ||
                         (link.raw_source && 
                           this.selectedSources.includes(link.raw_source));
 
-        // Editor filter
+        // Editor filter (exact match)
         const hasEditor = this.selectedEditors.length === 0 ||
-                        (!this.selectedEditors.length && !link.last_edited_by) ||
                         (link.last_edited_by && 
                           this.selectedEditors.includes(link.last_edited_by));
 
-        // Type filter
+        // Type filter (exact match)
         const hasType = this.selectedTypes.length === 0 ||
-                      (!this.selectedTypes.length && !link.type) ||
                       (link.type && 
                         this.selectedTypes.includes(link.type));
 
@@ -266,10 +265,13 @@ export default {
     selectedTypes: 'refreshGraph',
     filteredLinks: {
       handler(newLinks) {
-        if (this.d3) {
-          this.processLinks();
-          this.resetSimulation();
-          this.updateGraphData(newLinks);
+        try {
+          if (this.d3) {
+            this.processLinks();
+            this.updateGraphData(newLinks);
+          }
+        } catch (error) {
+          console.error('Filter update error:', error);
         }
       },
       immediate: true,
@@ -318,23 +320,31 @@ export default {
     },
 
     resetSimulation() {
-        if (!this.d3 || !this.simulation) return;
+        // if (!this.d3 || !this.simulation) return;
 
-        // Stop existing simulation
-        this.simulation.stop();
+        // // Stop existing simulation
+        // this.simulation.stop();
         
-        // Get current dimensions
-        const { width, height } = this.getDimensions();
+        // // Get current dimensions
+        // const { width, height } = this.getDimensions();
 
-        // Reinitialize forces
-        this.simulation
-          .force('charge', this.d3.forceManyBody().strength(-10000))
-          .force('center', this.d3.forceCenter(width / 2, height / 2))
-          .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
-          .force('collision', this.d3.forceCollide().radius(5));
+        // // Reinitialize forces
+        // this.simulation
+        //   .force('charge', this.d3.forceManyBody().strength(-10000))
+        //   .force('center', this.d3.forceCenter(width / 2, height / 2))
+        //   .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
+        //   .force('collision', this.d3.forceCollide().radius(5));
 
-        // Restart with fresh alpha
-        this.simulation.alpha(1).restart();
+        // // Restart with fresh alpha
+        // this.simulation.alpha(1).restart();
+      if (this.simulation) {
+        this.simulation.stop();
+        this.simulation.nodes([]);
+        this.simulation.force('link', null);
+        this.simulation.force('charge', null);
+        this.simulation.force('center', null);
+        this.simulation = null;
+      }
     },
     initZoom() {
       const svg = this.d3.select(this.$refs.graphContainer).select('svg')
@@ -365,23 +375,27 @@ export default {
         .call(this.zoom.transform, this.d3.zoomIdentity)
     },
     processLinks() {
-      const nodeMap = new Map(this.nodes.map(node => [node.id, node]))
+      const nodeMap = new Map(this.nodes.map(node => [node.id, node]));
       this.processedLinks = this.filteredLinks
         .map(link => {
-          // Handle both ID references and object references
-          const source = nodeMap.get(link.source?.id || link.source);
-          const target = nodeMap.get(link.target?.id || link.target);
-          
-          if (!source || !target) {
-            console.warn('Invalid link:', link);
+          try {
+            const source = nodeMap.get(link.source?.id || link.source);
+            const target = nodeMap.get(link.target?.id || link.target);
+            
+            if (!source || !target) {
+              console.warn('Invalid link:', link);
+              return null;
+            }
+            
+            return {
+              ...link,
+              source,
+              target
+            };
+          } catch (error) {
+            console.error('Link processing error:', error);
             return null;
           }
-          
-          return {
-            ...link,
-            source,
-            target
-          };
         })
         .filter(Boolean);
     },
@@ -393,169 +407,35 @@ export default {
     },
 
     initGraph() {
-       const container = this.$refs.graphContainer
-      if (!container) return
+      const container = this.$refs.graphContainer;
+      if (!container) return;
 
-      container.innerHTML = ''
-      const { width, height } = this.getDimensions()
+      const { width, height } = this.getDimensions();
+
+      // Clear existing SVG
+      container.innerHTML = '';
       
-      // Create SVG first
       const svg = this.d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .style('background', '#f7ede2')
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .style("background", "#f7ede2");
 
-      // Initialize zoom group before creating graph elements
-      this.zoomGroup = svg.append('g')
+      this.zoomGroup = svg.append("g");
+      this.initZoom();
 
-      
-      // Create simulation
+      // Initialize simulation
       this.simulation = this.d3.forceSimulation()
-        .force('charge', this.d3.forceManyBody().strength(-10000))
-        .force('center', this.d3.forceCenter(width / 2, height / 2))
-        .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(1000))
-        .force('collision', this.d3.forceCollide().radius(5))
+        .force("link", this.d3.forceLink().id(d => d.id).distance(100))
+        .force("charge", this.d3.forceManyBody().strength(-10000))
+        .force("center", this.d3.forceCenter(width / 2, height / 2))
+        .force("collision", this.d3.forceCollide().radius(5))
+        .on("tick", () => this.tickHandler());
 
-      const nodeGroups = this.zoomGroup
-        .append('g')
-        .selectAll('g.node-group')
-        .data(this.nodes)
-        .join('g')
-        .attr('class', 'node-group')
-        .call(this.dragHandler());
+      // Initial data bind
+      this.updateGraphData(this.filteredLinks);
 
-      // Add invisible hit area
-      nodeGroups.append('circle')
-        .attr('r', 15)
-        .attr('fill', 'transparent')
-        .attr('pointer-events', 'visible');
-
-      // Add visible node circle
-      nodeGroups.append('circle')
-        .attr('r', 5)
-        .attr('fill', '#264653');
-
-      // Add text labels
-      nodeGroups.append('text')
-        .text(d => d.id)
-        .attr('dx', 8)
-        .attr('dy', 4)
-        .style('font-size', '10px')
-        .style('fill', '#264653')
-        .style('pointer-events', 'none');      
-
-      const link = this.zoomGroup
-        .append('g')
-        .selectAll('line')
-        .data(this.processedLinks)
-        .join('line')
-        .attr('stroke', d => this.getLinkColor(d))
-        .attr('stroke-width', 5)
-        .attr('stroke-opacity', 0.3) // Keep visible but subtle
-        .attr('pointer-events', 'visible');
-
-      const node = this.zoomGroup
-        .append('g')
-        .selectAll('circle')
-        .data(this.nodes)
-        .join('circle')
-        .attr('r', 5)
-        .attr('fill', '#264653')
-        .attr('pointer-events', 'visible')
-        .call(this.dragHandler())
-      
-        // Simulation handler
-      this.simulation.nodes(this.nodes)
-        .on('tick', () => {
-          link
-            .attr('x1', d => d.source.x)
-            .attr('y1', d => d.source.y)
-            .attr('x2', d => d.target.x)
-            .attr('y2', d => d.target.y)
-
-          node
-            .attr('cx', d => d.x)
-            .attr('cy', d => d.y)
-
-          nodeGroups
-            .attr('transform', d => `translate(${d.x},${d.y})`);
-        })
-
-      node
-        .on('mouseover', (event, d) => {
-          this.hoveredElement = { type: 'node', data: d }
-          this.updateMousePosition(event)
-        })
-        .on('mouseout', () => {
-          this.hoveredElement = null
-        })
-        .on('mousemove', this.updateMousePosition)
-
-      // Add hover handlers to links
-      link
-        .on('mouseover', (event, d) => {
-          this.hoveredElement = { type: 'link', data: d }
-          this.updateMousePosition(event)
-        })
-        .on('mouseout', () => {
-          this.hoveredElement = null
-        })
-        .on('mousemove', this.updateMousePosition)
-
-      // Update existing node click handler
-      node
-      .on('click', (event, d) => {
-        this.selectedNode = d
-        this.selectedConnection = null  // Clear link selection
-        event.stopPropagation()
-      })
-
-      link
-      .on('click', (event, clickedLink) => {
-        event.stopPropagation()
-        
-        // Find all links between these two nodes (both directions)
-        const nodePair = [
-          clickedLink.source.id, 
-          clickedLink.target.id
-        ].sort().join('|')
-        
-        const allLinks = this.processedLinks.filter(l => {
-          const currentPair = [l.source.id, l.target.id].sort().join('|')
-          return currentPair === nodePair
-        })
-
-        this.selectedConnection = {
-          nodes: [clickedLink.source, clickedLink.target],
-          links: allLinks
-        }
-        
-        this.selectedNode = null
-      })
-
-      nodeGroups
-        .on('mouseover', (event, d) => {
-          this.hoveredElement = { type: 'node', data: d };
-          this.updateMousePosition(event);
-        })
-        .on('click', (event, d) => {
-          this.selectedNode = d;
-          this.selectedConnection = null;
-          event.stopPropagation();
-        });
-
-      const svg_mouse = this.d3.select(this.$refs.graphContainer).select('svg')
-      svg_mouse.on('mousemove', this.updateMousePosition)
-     
-      this.simulation.on('end', () => {
-        this.nodes.forEach(n => {
-          n.fx = null;
-          n.fy = null;
-        });
-      });
     },
-
     dragHandler() {
       return this.d3.drag()
         .on('start', event => {
@@ -589,7 +469,21 @@ export default {
         y: (event.clientY - container.top - transform.y) / transform.k
       }
     },
+    handleNodeHover(event, d) {
+      this.hoveredElement = { type: "node", data: d };
+      this.updateMousePosition(event);
+    },
 
+    handleNodeClick(event, d) {
+      this.selectedNode = d;
+      this.selectedConnection = null;
+      event.stopPropagation();
+    },
+
+    handleLinkHover(event, d) {
+      this.hoveredElement = { type: "link", data: d };
+      this.updateMousePosition(event);
+    },
     formatBiasName(biasKey) {
       return biasKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     },
@@ -597,90 +491,103 @@ export default {
     updateGraphData(filteredLinks) {
       if (!this.d3 || !this.simulation) return;
 
-      // Process new links with proper node references
+      // Process links while maintaining node references
       const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
       this.processedLinks = filteredLinks.map(link => ({
         ...link,
-        source: nodeMap.get(link.source),
-        target: nodeMap.get(link.target)
-      }));
+        source: nodeMap.get(link.source?.id || link.source),
+        target: nodeMap.get(link.target?.id || link.target)
+      })).filter(link => link.source && link.target);
+
+      // Preserve existing node positions
+      const existingNodes = new Map(this.nodes.map(n => [n.id, n]));
 
       // Update simulation forces
       this.simulation
-        // .force('link', this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
-        // .alpha(1)
-        .restart();
-      
-      const nodePositions = new Map(this.nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+        .force("link", this.d3.forceLink(this.processedLinks).id(d => d.id).distance(100))
+        .force("charge", this.d3.forceManyBody().strength(-10000));
 
-      // Get current dimensions
-      const { width, height } = this.getDimensions();
+      // Update nodes
+      const nodes = this.zoomGroup.selectAll(".node-group")
+        .data(this.nodes, d => d.id);
 
-      // DATA JOIN with proper key function
-      const links = this.zoomGroup.selectAll('line')
-        .data(this.processedLinks, d => 
-          `${d.source?.id}-${d.target?.id}-${d.type}`
-        );
+      nodes.exit().remove();
 
-      // EXIT old links
+      const nodeEnter = nodes.enter()
+        .append("g")
+        .attr("class", "node-group")
+        .call(this.dragHandler());
+
+      // Add node elements
+      nodeEnter.append("circle")
+        .attr("r", 15)
+        .attr("fill", "transparent")
+        .attr("pointer-events", "visible");
+
+      nodeEnter.append("circle")
+        .attr("r", 5)
+        .attr("fill", "#264653");
+
+      nodeEnter.append("text")
+        .text(d => d.id)
+        .attr("dx", 8)
+        .attr("dy", 4)
+        .style("font-size", "10px")
+        .style("fill", "#264653");
+
+      // Merge nodes
+      const nodeMerge = nodeEnter.merge(nodes)
+        .on("mouseover", (event, d) => this.handleNodeHover(event, d))
+        .on("click", (event, d) => this.handleNodeClick(event, d));
+
+      // Update links
+      const links = this.zoomGroup.selectAll("line")
+        .data(this.processedLinks, d => `${d.source.id}-${d.target.id}`);
+
       links.exit()
         .transition()
         .duration(500)
-        .style('opacity', 0)
+        .style("opacity", 0)
         .remove();
 
-      // ENTER new links
-      const enterLinks = links.enter()
-        .append('line')
-        .attr('stroke', d => this.getLinkColor(d))
-        .attr('stroke-width', 5)
-        .style('opacity', 0)
-        .on('mouseover', (event, d) => {
-          this.hoveredElement = { type: 'link', data: d };
-          this.updateMousePosition(event);
-        });
+      const linkEnter = links.enter()
+        .append("line")
+        .attr("stroke", d => this.getLinkColor(d))
+        .attr("stroke-width", 5)
+        .style("opacity", 0)
+        .on("mouseover", (event, d) => this.handleLinkHover(event, d))
+        .on("click", (event, d) => this.handleLinkClick(event, d));
 
-      // UPDATE existing + new links
-      links.merge(enterLinks)
+      links.merge(linkEnter)
         .transition()
         .duration(500)
-        .style('opacity', 0.7)
-        .attr('stroke', d => this.getLinkColor(d))
-        .attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y);
+        .style("opacity", 0.7)
+        .attr("stroke", d => this.getLinkColor(d));
 
-      // Restart simulation with new data
-      this.simulation
-        .nodes(this.nodes)
-        .force('link', this.d3.forceLink(this.processedLinks))
-        .alphaTarget(0.3)
-        .restart();
-
-          // Restore positions after data update
+      // Restore positions and restart simulation
       this.nodes.forEach(n => {
-        const pos = nodePositions.get(n.id);
-        if (pos) {
-          n.x = pos.x;
-          n.y = pos.y;
-          n.fx = pos.x;
-          n.fy = pos.y;
+        const existing = existingNodes.get(n.id);
+        if (existing) {
+          n.x = existing.x;
+          n.y = existing.y;
         }
       });
 
-      this.simulation.alpha(0.5).restart();
-
-      console.log('Active links:', this.processedLinks.length);
-      console.log('Sample link:', this.processedLinks[0]);
-      console.log('Processed links:', this.processedLinks);
-      console.log('First processed link:', this.processedLinks[0] && {
-        source: this.processedLinks[0].source?.id,
-        target: this.processedLinks[0].target?.id,
-        type: this.processedLinks[0].type
-  });
+      this.simulation
+        .nodes(this.nodes)
+        .alpha(0.5)
+        .restart();
     },
+    tickHandler() {
+      this.zoomGroup.selectAll("line")
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
 
+      this.zoomGroup.selectAll(".node-group")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+    },
     handleLinkClick(event, clickedLink) {
       event.stopPropagation();
       const nodePair = [
@@ -688,7 +595,7 @@ export default {
         clickedLink.target.id
       ].sort().join('|');
       
-      const allLinks = this.filteredLinks.filter(l => {
+      const allLinks = this.processedLinks.filter(l => {
         const currentPair = [l.source.id, l.target.id].sort().join('|');
         return currentPair === nodePair;
       });
