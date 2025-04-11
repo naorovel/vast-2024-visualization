@@ -14,7 +14,7 @@
         <h2>Distribution of Sources Used by Analysts</h2>
         <button class="download-btn" @click="downloadChart('sources')">download</button>
       </div>
-      <!-- 【修改位置：新增 source 筛选按钮组】 -->
+
       <div style="margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap;">
         <button @click="selectedSource = 'all'" :class="{ active: selectedSource === 'all' }">All</button>
         <button v-for="src in allSources" :key="src" @click="selectedSource = src" :class="{ active: selectedSource === src }" style="margin-left: 10px;">
@@ -74,10 +74,10 @@ const activeChart = ref('sources')
 const selectedAnalyst = ref('all')
 const timeSeriesAnalysts = ref([])
 
-// 新增变量，用于 source 筛选
+
 const selectedSource = ref('all')
 const allSources = ref([])
-// 新增：声明 time series 相关的变量
+
 let originalTimeSeriesTraces = [];
 let layoutTimeSeries = {};
 
@@ -102,7 +102,6 @@ const paletteEventTypes = [
   '#e31a1c', '#fdbf6f', '#ff7f00', '#cab2d6', '#6a3d9a'
 ]
 
-// 保存 Distribution of Sources 的原始 traces 和 layout，以便更新时使用
 let originalTracesSources = []
 let layoutSources = {}
 
@@ -129,7 +128,7 @@ onMounted(async () => {
   const jsonData = await response.json()
   const events = jsonData.links || []
 
-  // ---------------- Distribution of Sources 部分 ----------------
+
   const dataMapSources = {}
   events.forEach(event => {
     const analyst = event._last_edited_by
@@ -139,7 +138,7 @@ onMounted(async () => {
     }
     dataMapSources[analyst][source] = (dataMapSources[analyst][source] || 0) + 1
   })
-  // 收集所有 source 用于生成按钮组
+
   const sourcesSet = new Set()
   for (const analyst in dataMapSources) {
     for (const source in dataMapSources[analyst]) {
@@ -150,7 +149,7 @@ onMounted(async () => {
   allSources.value = uniqueSources
 
   const analystsSources = Object.keys(dataMapSources)
-  // 针对每个 source 生成一个 trace（默认堆叠展示）
+
   const tracesSources = uniqueSources.map((source, index) => {
     const counts = analystsSources.map(analyst => dataMapSources[analyst][source] || 0)
     return {
@@ -162,7 +161,7 @@ onMounted(async () => {
       marker: { color: paletteSources[index % paletteSources.length] }
     }
   })
-  originalTracesSources = tracesSources  // 保存原始数据供后续切换使用
+  originalTracesSources = tracesSources  
 
   const baseWidth = 1694;
   const baseHeight = 600;
@@ -330,13 +329,11 @@ onMounted(async () => {
   Plotly.newPlot(chartEventCount.value, [traceEventCount], layoutEventCount)
 })
 
-// 新增：监听 selectedSource 变化来更新 Distribution of Sources 图表
+
 watch(selectedSource, (newVal) => {
   if (newVal === 'all') {
-    // 如果选择 'all'，恢复所有 trace，并保持堆叠效果
     PlotlyRef.react(chartSources.value, originalTracesSources, layoutSources);
   } else {
-    // 如果选择了具体的 source，则只显示该 source 的 trace，并使用组状模式
     const filteredTrace = originalTracesSources.filter(trace => trace.name === newVal);
     const updatedLayout = { ...layoutSources, barmode: 'group' };
     PlotlyRef.react(chartSources.value, filteredTrace, updatedLayout);
