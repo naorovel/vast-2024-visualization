@@ -18,7 +18,9 @@
     "vue-router": "^4.3.2"
   },
   "dependencies": {
+
     "@nuxtjs/axios": "^5.13.6",
+
     "concurrently": "^8.2.2",
     "plotly.js-dist-min": "^3.0.1"
   }
