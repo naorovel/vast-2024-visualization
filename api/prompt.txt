@@ -1,0 +1,8 @@
+Identify potential biases in this article. Output should be in JSON format where the keys are from the following array of bias types, and the values are arrays of keywords verbatim from the article exemplifying the type of bias. Do not include any additional text apart from the JSON itself. No markdown formatting.
+
+Bias types: [
+    "Confirmation Bias", "Anchoring Bias", "Availability Bias", "Hindsight Bias", "Framing Bias", "Actor-Observer Bias", "Fundamental Attribution Error Bias", "Self-Serving Bias", 
+    "Halo Effect", "Bandwagon Effect", "Authority Bias", Status Quo Bias", "Loss Aversion Bias", "Overconfidence Bias", "Illusion of Control Bias", "Gambler's Fallacy Bias", 
+    "Positive Bias", "Negative Bias", "Emotional Bias", "Social Desirability Bias", "Recency Bias", "Sunk Cost Fallacy", "Lack of Objectivity", "Stereotyping", "Selection Bias", 
+    "Presentation Bias", "Information Bias", "Experiential Bias", "Linguistic Bias", "Cultural Bias"
+]

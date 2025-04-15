@@ -37,4 +37,29 @@ export default defineNuxtConfig({
   },
   // Optional: Add Axios module if you prefer using Axios over useFetch
   // modules: ['@nuxtjs/axios'],
+  
+  compatibilityDate: "2025-03-16",
+  components: [
+    {
+      path:'~/components',
+      pathPrefix: false,
+    }
+  ],
+  modules:['@nuxt/ui', "@nuxtjs/color-mode"],
+  css:['./assets/css/main.css'],
+  build: {
+    standalone: true,
+    parallel: false,
+    cache: true,
+    hardSource: false
+  },
+  nitro: {
+    devServer: {
+      watch: ['./src/**']
+    }
+  },
+    features: {
+    devLogs: false,
+    transitions: false
+  } 
 })

@@ -220,6 +220,35 @@ async def get_sankey():
     sankey_df_top = sankey_df[sankey_df['edge_type'].isin(top_edges)]
     return sankey_df_top.to_dict(orient="records")
 
+
+
+num_nodes = 100
+
+graph = load_graph(num_nodes)
+
+@app.get("/api")
+def hello_world():
+    return {"message": "Hello World", "api": "Python"}
+
+
+@app.get('/links')
+def get_links(): 
+    global graph
+    return graph['links']
+
+@app.get('/nodes')
+def get_nodes():
+    global graph
+    return graph['nodes']
+
+@app.get('/graph')
+def get_graph(): 
+    global graph
+    return graph['graph']
+    
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+from api.bias_detection import get_link_data, get_node_data, load_graph
+
