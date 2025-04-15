@@ -1,16 +1,14 @@
-# from fastapi import FastAPI
-
-# app = FastAPI()
-
-# @app.get("/api")
-# def hello_world():
-#     return {"message": "Hello World", "api": "Python"}
-
 from fastapi import FastAPI
 import networkx as nx
 import json
 import pandas as pd
 import os
+import sys
+import os
+sys.path.append(os.path.abspath("./api/"))
+from bias_detection import load_graph
+import uvicorn
+
 
 app = FastAPI()
 
@@ -32,7 +30,7 @@ edge_type_descriptions = {
 }
 
 # Step 1 & Step 2: Load the graph and process edges
-with open('mc1.json', 'r') as f:
+with open('./api/mc1.json', 'r') as f:
     graph_data = json.load(f)
 G = nx.node_link_graph(graph_data, directed=True, multigraph=True, edges="links")
 print(f"Nodes: {G.number_of_nodes()}")
@@ -44,7 +42,7 @@ shadgpt_edges = edges_df[edges_df['_algorithm'] == 'ShadGPT'].copy()
 bassline_edges = edges_df[edges_df['_algorithm'] == 'BassLine'].copy()
 
 # Step 3: Load articles
-articles_folder = 'articles'
+articles_folder = './api/articles'
 article_files = [f for f in os.listdir(articles_folder) if f.endswith('.txt')]
 articles_content = {}
 for file in article_files:
@@ -248,7 +246,6 @@ def get_graph():
     
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 from api.bias_detection import get_link_data, get_node_data, load_graph
 
